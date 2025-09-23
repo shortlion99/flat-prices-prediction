@@ -1,0 +1,24 @@
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python cache and build
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# OS files
+.DS_Store
+
+# Local env/config
+.env
+.env.local
+.python-version
+data/hdb_df_geocoded.csv
+data/hdb_resale_full.csv
+data/hdb_df_geocoded.csv
+data/hdb_resale_full.csv
