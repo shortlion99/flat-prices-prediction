@@ -1,14 +1,24 @@
 import streamlit as st
-import pandas as pd
+import duckdb
 import pydeck as pdk
-import data.download_data  # ensures the CSV is downloaded
+
+@st.cache_data
+def load_map_data(limit=20000):
+    con = duckdb.connect("data/hdb_resale_full.duckdb")
+    query = f"""
+        SELECT latitude, longitude, resale_price, 
+               nearest_mrt_name, nearest_schools_name
+        FROM resale
+        WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+        LIMIT {limit}
+    """
+    df = con.execute(query).df()
+    con.close()
+    return df
 
 def show_map():
-    # Load dataset
-    df = pd.read_csv("data/hdb_resale_full.csv")
-
-    # Keep only necessary columns for mapping
-    map_df = df[["latitude", "longitude", "resale_price", "nearest_mrt_name", "nearest_schools_name"]].dropna()
+    st.title("HDB Resale Map")
+    map_df = load_map_data()
 
     # --- Configure pydeck map ---
     layer = pdk.Layer(
@@ -16,7 +26,7 @@ def show_map():
         data=map_df,
         get_position=["longitude", "latitude"],
         get_radius=50,
-        get_fill_color=[149, 6, 6, 160],  # same dark red theme (#950606)
+        get_fill_color=[149, 6, 6, 160],  # dark red theme (#950606)
         pickable=True,
     )
 
