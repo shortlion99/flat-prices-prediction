@@ -22,3 +22,4 @@ data/hdb_df_geocoded.csv
 data/hdb_resale_full.csv
 data/hdb_df_geocoded.csv
 data/hdb_resale_full.csv
+data/hdb_resale_full.duckdb
