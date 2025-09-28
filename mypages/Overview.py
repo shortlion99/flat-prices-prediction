@@ -1,18 +1,24 @@
 import streamlit as st
 import duckdb
-import altair as alt
+from components.price_trends import show_price_trends
+from components.flat_distribution import show_flat_distribution
 
 def show():
-    st.title("🔍 DuckDB Data")
-
     con = duckdb.connect("data/hdb_df_geocoded_condensed.duckdb")
+    df = con.execute("""
+        SELECT 
+            month,
+            flat_type,
+            region,
+            flat_model,
+            resale_price,
+            price_per_sqm,
+        FROM resale
+    """).df()
 
-    # See what columns exist
-    st.write("Table schema:")
-    schema = con.execute("PRAGMA table_info(resale)").fetchdf()
-    st.dataframe(schema)
+    # Components
+    st.subheader("📈 Price Trends")
+    show_price_trends(df)
 
-    # Preview first rows
-    st.write("First few rows:")
-    preview = con.execute("SELECT * FROM resale LIMIT 5").fetchdf()
-    st.dataframe(preview)
+    st.subheader("🏠 Flat Type Distribution")
+    show_flat_distribution(df)
