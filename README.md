@@ -20,7 +20,12 @@ pip install -r requirements.txt
 
 - Place a serialized scikit-learn model at `models/model.pkl`.
 
-### 4) Start the app
+### 4) Download the data
+```bash
+python data/download_data.py
+```
+
+### 5) Start the app
 
 ```bash
 streamlit run app.py

@@ -19,7 +19,7 @@ dist/
 .env.local
 .python-version
 data/hdb_df_geocoded.csv
-data/hdb_resale_full.csv
+data/hdb_df_geocoded_condensed.csv
 data/hdb_df_geocoded.csv
-data/hdb_resale_full.csv
-data/hdb_resale_full.duckdb
+data/hdb_df_geocoded_condensed.csv
+data/hdb_df_geocoded_condensed.duckdb

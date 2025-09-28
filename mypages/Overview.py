@@ -5,7 +5,7 @@ import altair as alt
 def show():
     st.title("🔍 DuckDB Data")
 
-    con = duckdb.connect("data/hdb_resale_full.duckdb")
+    con = duckdb.connect("data/hdb_df_geocoded_condensed.duckdb")
 
     # See what columns exist
     st.write("Table schema:")

@@ -13,7 +13,7 @@ def _norm_flat_label(s: str) -> str:
 
 @st.cache_data(show_spinner=False)
 def load_data(
-    path: str = "data/hdb_resale_full.csv",
+    path: str = "data/hdb_df_geocoded_condensed.csv",
 ) -> tuple[pd.DataFrame, list[str], list[str]]:
     df = pd.read_csv(path)
 
@@ -230,11 +230,11 @@ def show():
     st.title("Analytics — Preference Explorer")
 
     # Load data + (optional) model
-    df, flat_cols, flat_types = load_data("data/hdb_resale_full.csv")
+    df, flat_cols, flat_types = load_data("data/hdb_df_geocoded_condensed.csv")
     model = load_model("model.pkl")
     model_loaded = model is not None
     st.caption(
-        "Data loaded from **data/hdb_resale_full.csv**"
+        "Data loaded from **data/hdb_df_geocoded_condensed.csv**"
         + (
             " · Model loaded"
             if model_loaded

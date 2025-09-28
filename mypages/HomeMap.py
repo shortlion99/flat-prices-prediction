@@ -4,7 +4,7 @@ import pydeck as pdk
 
 @st.cache_data
 def load_map_data(limit=20000):
-    con = duckdb.connect("data/hdb_resale_full.duckdb")
+    con = duckdb.connect("data/hdb_df_geocoded_condensed.duckdb")
     query = f"""
         SELECT latitude, longitude, resale_price, 
                nearest_mrt_name, nearest_schools_name
