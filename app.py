@@ -8,7 +8,11 @@ import mypages.Chatbot as chatbot
 import mypages.HomeMap as homemap
 
 # --- Page Config ---
-st.set_page_config(page_title="HDB Resale Market Explorer", layout="wide")
+st.set_page_config(
+    page_title="HDB Resale Market Explorer",
+    page_icon="🏠",
+    layout="wide",
+)
 
 # --- Init state ---
 if "current_page" not in st.session_state:

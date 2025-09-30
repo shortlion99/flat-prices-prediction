@@ -17,8 +17,6 @@ def show():
     """).df()
 
     # Components
-    st.subheader("📈 Price Trends")
     show_price_trends(df)
 
-    st.subheader("🏠 Flat Type Distribution")
     show_flat_distribution(df)
