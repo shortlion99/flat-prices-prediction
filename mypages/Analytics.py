@@ -334,7 +334,7 @@ def quick_forecast(trend_df: pd.DataFrame, years_ahead: int = 5):
 
 # ---------------------------- Page ----------------------------
 def show():
-    st.set_page_config(page_title="HDB Analytics", layout="wide")
+    st.title("🏡 HDB Analytics")
     st.markdown(
         """
         <style>

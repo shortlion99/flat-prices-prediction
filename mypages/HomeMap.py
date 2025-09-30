@@ -19,7 +19,6 @@ def load_map_data(limit=20000):
 
 
 def show_map():
-    st.title("HDB Resale Map")
     map_df = load_map_data()
 
     # --- Configure pydeck map ---
