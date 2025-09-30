@@ -2,6 +2,7 @@ import streamlit as st
 import duckdb
 import pydeck as pdk
 
+
 @st.cache_data
 def load_map_data(limit=20000):
     con = duckdb.connect("data/hdb_df_geocoded_condensed.duckdb")
@@ -15,6 +16,7 @@ def load_map_data(limit=20000):
     df = con.execute(query).df()
     con.close()
     return df
+
 
 def show_map():
     st.title("HDB Resale Map")
@@ -41,7 +43,7 @@ def show_map():
     # Render map
     st.pydeck_chart(
         pdk.Deck(
-            map_style="mapbox://styles/mapbox/light-v9",
+            map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
             initial_view_state=view_state,
             layers=[layer],
             tooltip={
