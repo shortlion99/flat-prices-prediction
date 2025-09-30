@@ -16,9 +16,10 @@ python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3) Provide our trained model
-
-- Place a serialized scikit-learn model at `models/model.pkl`.
+### 3) Install OpenMP runtime
+```bash
+brew install libomp
+```
 
 ### 4) Download the data
 ```bash

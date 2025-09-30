@@ -507,6 +507,7 @@ def show():
                     ),
                     y=alt.Y("count():Q", title="Count"),
                 )
+                .properties(height=440)
             )
             render_altair(hist)
             st.caption(f"{len(comp_df)} comparable transactions")
