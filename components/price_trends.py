@@ -16,7 +16,7 @@ def show_price_trends(df):
     }
 
     with st.container(border=True):
-        top_cols = st.columns([3, 2])
+        top_cols = st.columns([2, 3])
         with top_cols[0]:
             st.markdown("## 📈 Historical Price Trends")
 
