@@ -335,6 +335,9 @@ def quick_forecast(trend_df: pd.DataFrame, years_ahead: int = 5):
 # ---------------------------- Page ----------------------------
 def show():
     st.title("🏡 HDB Analytics")
+    st.caption(
+        "Use predictive models and time-series forecasts to estimate property prices based on location and attributes."
+    )
     st.markdown(
         """
         <style>

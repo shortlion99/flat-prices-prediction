@@ -58,7 +58,7 @@ def latest_snapshot(df):
 
     # --- Market Snapshot Section ---
     with st.container(border=True):
-        st.subheader(f"📊 Market Snapshot – {latest_month.strftime('%B %Y')}")
+        st.subheader(f"📅 Market Snapshot – {latest_month.strftime('%B %Y')}")
         st.caption("All figures below reflect the most recent month compared with the previous month.")
 
         cols = st.columns(5)

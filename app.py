@@ -5,7 +5,6 @@ from streamlit_option_menu import option_menu
 import mypages.Overview as overview
 import mypages.Analytics as analytics
 import mypages.Chatbot as chatbot
-import mypages.HomeMap as homemap
 
 # --- Page Config ---
 st.set_page_config(
@@ -16,10 +15,10 @@ st.set_page_config(
 
 # --- Init state ---
 if "current_page" not in st.session_state:
-    st.session_state.current_page = "Home"
+    st.session_state.current_page = "Overview"
 
 # --- Navbar ---
-page_list = ["Home", "Overview", "Analytics", "Chatbot"]
+page_list = ["Overview", "Analytics", "Chatbot"]
 default_index = page_list.index(st.session_state.current_page)
 
 # --- Global CSS for Styling ---
@@ -67,7 +66,7 @@ with st.container():
     selected = option_menu(
         menu_title=None,
         options=page_list,
-        icons=["house", "bar-chart", "graph-up", "chat-dots"],
+        icons=["bar-chart", "graph-up", "chat-dots"],
         menu_icon="cast",
         default_index=default_index,   # sync with session_state
         orientation="horizontal",
@@ -85,30 +84,7 @@ st.session_state.current_page = selected
 
 
 # --- Page Routing ---
-if st.session_state.current_page == "Home":
-    st.markdown("# HDB Resale Market Explorer")
-    homemap.show_map()
-
-    st.markdown("## Purpose")
-    st.markdown(
-        "This dashboard provides comprehensive predictive analytics and insights for "
-        "Singapore's HDB resale market, designed to help home buyers, investors, "
-        "policymakers, and researchers make informed decisions. "
-        "Using transaction data from 2017 onwards, we combine machine learning models with interactive visualizations "
-        "to deliver accurate property price predictions and market trend analysis."
-    )
-
-    st.markdown("## Features")
-    st.markdown(
-    """
-**Overview** – Market trends, district price maps, and historical analysis across HDB resale properties.  
-**Analytics** – Price prediction tools based on location, amenities, and property attributes. Includes time-series forecasting and built-in models.  
-**Chatbot** – Conversational AI assistant providing instant property market insights and personalised guidance.  
-    """
-)
-
-
-elif st.session_state.current_page == "Overview":
+if st.session_state.current_page == "Overview":
     overview.show()
 elif st.session_state.current_page == "Analytics":
     analytics.show()

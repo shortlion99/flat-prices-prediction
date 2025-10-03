@@ -21,6 +21,10 @@ def show():
 
 
     with st.container():
+        st.title("📊 Market Overview")
+        st.caption(
+            "Explore historical market trends, price distributions, and geographic insights across Singapore's HDB resale market."
+        )
         latest_snapshot(df)
         col1, col2 = st.columns([2, 1]) 
         with col1:
