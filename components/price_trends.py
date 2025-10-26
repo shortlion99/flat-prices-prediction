@@ -3,7 +3,7 @@ import plotly.express as px
 import pandas as pd
 
 def show_price_trends(df):
-    """Display price trends over time with user controls."""
+    """Display price trends over time."""
 
     # Labels
     measure_labels = {
