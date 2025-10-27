@@ -6,6 +6,7 @@ from components.flat_distribution import show_flat_distribution
 from components.latest_snapshot import latest_snapshot
 from components.map_overview import show_map
 from components.resale_price_distribution import show_resale_price_distribution
+from components.resale_price_relationships import show_relationship
 
 def show():
     con = duckdb.connect("data/hdb_df_geocoded_condensed.duckdb")
@@ -18,7 +19,13 @@ def show():
             flat_model,
             resale_price,
             price_per_sqm,
-            district_number
+            district_number,
+            nearest_mrt_distance_km,
+            nearest_supermarkets_distance_km,
+            nearest_schools_distance_km,
+            floor_area_sqm,
+            remaining_lease,
+            storey_mid
         FROM resale
     """).df()
 
@@ -35,5 +42,6 @@ def show():
         with col2:
             show_flat_distribution(df)
 
-        show_resale_price_distribution(df)
         show_map()
+        show_resale_price_distribution(df)
+        show_relationship(df)

@@ -64,7 +64,7 @@ def show_resale_price_distribution(df):
             y=value_choice,
             color=value_choice,
             color_continuous_scale="Reds",
-            title=f"HDB: {agg_choice.title()} {value_choice.replace('_', ' ').title()} by {group_choice.replace('_', ' ').title()}",
+            title=f"HDB {agg_choice.title()} {value_choice.replace('_', ' ').title()} by {group_choice.replace('_', ' ').title()}",
         )
         
         y_label = "Resale Price (SGD)" if value_choice == "resale_price" else "Price per sqm (SGD)"
