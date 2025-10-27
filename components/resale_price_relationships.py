@@ -35,7 +35,7 @@ def show_relationship(df):
             y_var = st.selectbox(
                 "**Outcome Variable (Y-axis):**",
                 list(y_axis_labels.keys()),
-                index=1,
+                index=0,
                 format_func=lambda x: y_axis_labels[x],
             )
 
@@ -47,7 +47,7 @@ def show_relationship(df):
                 "town": "Town",
             }
             color_var = st.selectbox(
-                "**Group By (optional):**",
+                "**Group By:**",
                 list(color_labels.keys()),
                 index=1,
                 format_func=lambda x: color_labels[x],
@@ -68,7 +68,7 @@ def show_relationship(df):
             trendline="ols" if show_regression else None,
             labels={x_var: x_var.replace("_", " ").title(), y_var: y_var.replace("_", " ").title()},
             title=f"{y_var.replace('_', ' ').title()} vs {x_var.replace('_', ' ').title()}",
-            opacity=0.6,
+            opacity=0.3,
         )
 
         st.plotly_chart(fig, use_container_width=True)

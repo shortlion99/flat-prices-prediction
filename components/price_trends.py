@@ -11,9 +11,16 @@ def show_price_trends(df):
         "price_per_sqm": "Price per sqm"
     }
     group_by_labels = {
+        None: "None",
         "region": "Region",
         "flat_type": "Flat Type",
         "flat_model": "Flat Model"
+    }
+    agg_map = {
+        "Mean": "mean",
+        "Median": "median",
+        "Min": "min",
+        "Max": "max"
     }
 
     with st.container(border=True):
@@ -40,8 +47,8 @@ def show_price_trends(df):
                         group_by = st.selectbox("Group", list(group_by_labels.keys()),
                                                 format_func=lambda x: group_by_labels[x], label_visibility="collapsed")
                     with f3:
-                        agg_func = st.selectbox("Aggregation", ["Mean", "Median", "Min", "Max"], label_visibility="collapsed")
-                    
+                        agg_func = st.selectbox("Aggregation", list(agg_map.keys()),
+                                            index=0, label_visibility="collapsed")
                     start_date, end_date = st.slider(
                         "Select time range", 
                         min_value=min_month,
@@ -59,17 +66,10 @@ def show_price_trends(df):
             (plot_df["month"] >= start_date)
             & (plot_df["month"] <= end_date)
         ]
+        group_cols = ["month"] if group_by is None else ["month", group_by]
 
         # --- Aggregate data ---
-        if agg_func == "Mean":
-            agg_df = plot_df.groupby(["month", group_by])[y_axis].mean().reset_index()
-        elif agg_func == "Median":
-            agg_df = plot_df.groupby(["month", group_by])[y_axis].median().reset_index()
-        elif agg_func == "Min":
-            agg_df = plot_df.groupby(["month", group_by])[y_axis].min().reset_index()
-        elif agg_func == "Max":
-            agg_df = plot_df.groupby(["month", group_by])[y_axis].max().reset_index()
-
+        agg_df = plot_df.groupby(group_cols, dropna=False)[y_axis].agg(agg_map[agg_func]).reset_index()
         agg_df = agg_df.sort_values("month")
 
         # --- Plot ---
