@@ -1,0 +1,157 @@
+[
+  {
+    "area": "Orchard",
+    "has_hdb": false,
+    "hdb_price_range": null,
+    "pros": [
+      "Prime central location",
+      "Luxury shopping and dining",
+      "Excellent MRT connectivity"
+    ],
+    "cons": [
+      "No HDB flats available",
+      "High cost of living",
+      "Traffic congestion and noise"
+    ]
+  },
+  {
+    "area": "Bukit Timah",
+    "has_hdb": false,
+    "hdb_price_range": null,
+    "pros": [
+      "Prestigious schools nearby",
+      "Close to nature reserves",
+      "Quiet and exclusive neighbourhood"
+    ],
+    "cons": [
+      "No HDB estates in the area",
+      "Very expensive housing options"
+    ]
+  },
+  {
+    "area": "Tampines",
+    "has_hdb": true,
+    "hdb_price_range": "SGD 500K - 900K",
+    "pros": [
+      "Mature town with full amenities",
+      "Good MRT and bus connectivity",
+      "Close to Changi Airport"
+    ],
+    "cons": [
+      "Can be crowded during peak hours",
+      "Far from central business district"
+    ]
+  },
+  {
+    "area": "Woodlands",
+    "has_hdb": true,
+    "hdb_price_range": "SGD 450K - 800K",
+    "pros": [
+      "Affordable HDB options",
+      "Family-friendly environment",
+      "Close to Malaysia via Causeway"
+    ],
+    "cons": [
+      "Far from city centre",
+      "Traffic jams near Causeway"
+    ]
+  },
+  {
+    "area": "Punggol",
+    "has_hdb": true,
+    "hdb_price_range": "SGD 480K - 850K",
+    "pros": [
+      "Modern new town",
+      "Scenic waterfront lifestyle",
+      "Family-oriented with parks and schools"
+    ],
+    "cons": [
+      "Still developing, fewer established amenities",
+      "Longer MRT travel time to CBD"
+    ]
+  },
+  {
+    "area": "Toa Payoh",
+    "has_hdb": true,
+    "hdb_price_range": "SGD 520K - 950K",
+    "pros": [
+      "One of the first HDB towns with strong heritage",
+      "Central location with good transport links",
+      "Plenty of hawker centres and amenities"
+    ],
+    "cons": [
+      "Older flats with smaller layouts",
+      "Can be noisy and crowded"
+    ]
+  },
+  {
+    "area": "Yishun",
+    "has_hdb": true,
+    "hdb_price_range": "SGD 420K - 780K",
+    "pros": [
+      "Affordable compared to other areas",
+      "Plenty of neighbourhood amenities",
+      "Close to nature parks like Lower Seletar Reservoir"
+    ],
+    "cons": [
+      "Far from city centre",
+      "Reputation for being less desirable in the past"
+    ]
+  },
+  {
+    "area": "Pasir Ris",
+    "has_hdb": true,
+    "hdb_price_range": "SGD 480K - 820K",
+    "pros": [
+      "Coastal town with access to beaches",
+      "Relaxed and family-friendly vibe",
+      "Close to Changi Airport"
+    ],
+    "cons": [
+      "Far from city centre",
+      "Limited nightlife and entertainment options"
+    ]
+  },
+  {
+    "area": "Tanjong Pagar",
+    "has_hdb": true,
+    "hdb_price_range": "SGD 700K - 1.2M",
+    "pros": [
+      "Very central location close to CBD",
+      "Plenty of trendy cafes and restaurants",
+      "Historic shophouses and cultural heritage"
+    ],
+    "cons": [
+      "HDB flats here are older and limited in number",
+      "Higher-than-average resale prices"
+    ]
+  },
+  {
+    "area": "Ang Mo Kio",
+    "has_hdb": true,
+    "hdb_price_range": "SGD 500K - 880K",
+    "pros": [
+      "Mature estate with strong amenities",
+      "Good transport links with upcoming MRT lines",
+      "Plenty of food options and neighbourhood malls"
+    ],
+    "cons": [
+      "Flats are older compared to newer estates",
+      "Crowded during peak hours"
+    ]
+  },
+  {
+    "area": "Jurong",
+    "has_hdb": true,
+    "hdb_price_range": "SGD 460K - 850K",
+    "pros": [
+      "Upcoming Jurong Lake District development",
+      "Plenty of malls like JEM, Westgate, IMM",
+      "Strong public transport links"
+    ],
+    "cons": [
+      "Far from city centre",
+      "Industrial areas nearby may cause noise"
+    ]
+  }
+]

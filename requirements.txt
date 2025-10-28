@@ -50,3 +50,12 @@ typing_extensions==4.15.0
 tzdata==2025.2
 urllib3==2.5.0
 xgboost==3.0.5
+
+
+# chabot
+langchain>=0.1.0
+langchain-mistralai>=0.1.0
+langgraph>=0.1.0
+python-dotenv>=1.0.0
+faiss-cpu>=1.7.0
+langchain-community>=0.0.30
