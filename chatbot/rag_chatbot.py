@@ -448,3 +448,31 @@ if __name__ == "__main__":
         print("1. A .env file with MISTRAL_API_KEY")
         print("2. The singapore_hdb_data.json file")
         print("3. All required packages installed")
+
+
+# ==== Streamlit adapter (simple, uses your class) ====
+from pathlib import Path
+from dotenv import load_dotenv
+
+_BOT = None  # cached singleton
+
+def _get_bot():
+    global _BOT
+    if _BOT is None:
+        # Load env once
+        ROOT = Path(__file__).resolve().parents[1]
+        load_dotenv(ROOT / ".env")
+        # Use the SAME data path as your CLI
+        data_file = ROOT / "data" / "hdb_rag" / "singapore_hdb_data.json"
+        _BOT = RAGChatbot(str(data_file))
+    return _BOT
+
+def answer(question: str, conversation_state: dict | None = None) -> str:
+    """
+    Streamlit calls this. We delegate to your class method which
+    knows how to build the correct MessagesState for LangGraph.
+    NOTE: conversation_state is a dict like {"messages": [...]}
+    and is mutated in place to maintain memory across turns.
+    """
+    bot = _get_bot()
+    return bot.chat(question, conversation_state)

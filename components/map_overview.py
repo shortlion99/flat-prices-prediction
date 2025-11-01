@@ -38,7 +38,7 @@ def show_map():
 
         col1, col2 = st.columns([1, 2])
         with col1:
-            layer_type = st.radio("", ["Scatterplot", "Heatmap"], horizontal=True)
+            layer_type = st.radio("Layer", ["Scatterplot", "Heatmap"], horizontal=True)
 
         with col2:
             limit = st.slider("Transactions displayed", 5000, 200000, 20000, step=10000)
