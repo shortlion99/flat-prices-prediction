@@ -2,6 +2,12 @@
 Singapore Housing RAG Chatbot
 A reusable RAG chatbot for Singapore housing information using LangChain and LangGraph.
 
+Features:
+- Uses Mistral AI for LLM (requires MISTRAL_API_KEY)
+- Uses local Sentence Transformers for embeddings 
+- Persistent vector storage with ChromaDB
+- Automatic embedding caching and invalidation
+
 Usage:
     from rag_chatbot import RAGChatbot
     
@@ -22,13 +28,16 @@ import os
 import json
 import hashlib
 import time
+
+# Suppress HuggingFace symlink warning on Windows
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
 
 # LangChain imports
 from langchain.chat_models import init_chat_model
-from langchain_mistralai import MistralAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.tools import tool
@@ -110,11 +119,17 @@ class RAGChatbot:
         """Initialize the LLM and embeddings models."""
         try:
             self.llm = init_chat_model("mistral-large-latest", model_provider="mistralai")
-            self.embeddings = MistralAIEmbeddings(model="mistral-embed")
-            print("✅ Models initialized successfully")
+            # Use local Sentence Transformers - no API calls, no rate limits!
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name='all-MiniLM-L6-v2',
+                model_kwargs={'device': 'cpu'},  # Use 'cuda' if you have GPU
+                encode_kwargs={'normalize_embeddings': True}
+            )
+            print("✅ Models initialized successfully (LLM: Mistral, Embeddings: Local Sentence Transformers)")
         except Exception as e:
             raise RuntimeError(f"Failed to initialize models: {e}")
     
+    # vector store management =====================================================================
     def _get_data_hash(self) -> str:
         """Generate a hash of the data files to detect changes.
            Ensures that any modification to data files results in a new vector store.
@@ -202,13 +217,13 @@ class RAGChatbot:
                 file_documents = []
                 for entry in data:
                     area = entry["area"]
-                    has_hdb = entry["has_hdb"]
                     hdb_price_range = entry["hdb_price_range"]
                     pros = entry["pros"]
                     cons = entry["cons"]
+                    nearby_amenities = entry.get("nearby_amenities", [])  
                     
                     doc = Document(
-                        page_content=f"Area: {area}\nHDB Available: {has_hdb}\nHDB Price range: {hdb_price_range}\nPros: {pros}\nCons: {cons}",
+                        page_content=f"Area: {area}\nHDB Price range: {hdb_price_range}\nPros: {pros}\nCons: {cons}\nNearby Amenities: {nearby_amenities}",
                         metadata={"Area": area, "Source": data_file}
                     )
                     file_documents.append(doc)
@@ -230,8 +245,8 @@ class RAGChatbot:
         print(f"✅ Created {len(json_splits)} document chunks")
         
         return json_splits
-    
-    # RAG pipeline =========================================
+
+    # RAG pipeline =============================================================================
     def _build_graph(self):
         """Build the LangGraph workflow."""
         
@@ -307,7 +322,7 @@ class RAGChatbot:
         self.graph = graph_builder.compile()
         print("✅ Graph workflow built successfully")
 
-# Chat functionality ===================================================
+    # Chat functionality ============================================================================
     
     def chat(self, message: str, conversation_state: Optional[Dict[str, Any]] = None) -> str:
         """
