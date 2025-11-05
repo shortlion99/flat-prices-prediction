@@ -51,9 +51,21 @@ def render_altair(chart):
 
 @st.cache_data(show_spinner=False)
 def load_data(
-    path: str = "data/hdb_df_geocoded_condensed.csv",
+    path: str = "data/hdb_df_geocoded_condensed.duckdb",
 ) -> tuple[pd.DataFrame, list[str], list[str]]:
-    df = pd.read_csv(path, low_memory=False)
+    con = duckdb.connect(path)
+    df = con.execute(
+        """
+        SELECT 
+            month, town, flat_type, region, flat_model,
+            resale_price, price_per_sqm, district_number,
+            nearest_mrt_distance_km, nearest_supermarkets_distance_km,
+            nearest_schools_distance_km, floor_area_sqm,
+            remaining_lease, storey_mid
+        FROM resale
+        """
+    ).df()
+    con.close()
 
     if "postal_code" in df.columns:
         df["postal_code"] = df["postal_code"].astype(str).str.strip()
@@ -79,7 +91,7 @@ def load_data(
     else:
         df["year"] = np.nan
 
-    # one-hot encoding
+    # one-hot encoding for flat_type
     flat_cols = [col for col in df.columns if col.startswith("flat_type_")]
     if not flat_cols:
         source_col = next(
@@ -370,8 +382,8 @@ def show():
         unsafe_allow_html=True,
     )
 
-    # data + model
-    df, flat_cols, flat_types = load_data("data/hdb_df_geocoded_condensed.csv")
+    # data + model (aligned with Overview via DuckDB)
+    df, flat_cols, flat_types = load_data("data/hdb_df_geocoded_condensed.duckdb")
     model = load_model("models/best_xgboost_model.pkl")
     model_loaded = model is not None
 
@@ -385,11 +397,21 @@ def show():
             else [],
         )
         flat_type = st.selectbox("Flat Type", flat_types, index=0)
-        area = st.number_input(
-            "Size (sqm)", min_value=20.0, max_value=200.0, value=80.0, step=5.0
+        # Area based on dataset quantiles for sensible bounds
+        a_min = (
+            float(max(20.0, df["floor_area_sqm"].quantile(0.02)))
+            if "floor_area_sqm" in df.columns
+            else 20.0
         )
+        a_max = (
+            float(min(200.0, df["floor_area_sqm"].quantile(0.98)))
+            if "floor_area_sqm" in df.columns
+            else 200.0
+        )
+        area = st.slider("Size (sqm)", a_min, a_max, float(np.clip(80.0, a_min, a_max)))
         lease = st.slider("Remaining Lease (years)", 0, 99, 60)
         st.markdown("---")
+        # Proximity
         mrt_km = st.slider("Max Distance to MRT (km)", 0.0, 5.0, 1.0, 0.1)
         schools_km = st.slider("Schools within (km)", 0.0, 5.0, 1.5, 0.1)
         childcare_km = st.slider("Childcare within (km)", 0.0, 5.0, 1.5, 0.1)
@@ -412,7 +434,7 @@ def show():
     }
     X_user = build_feature_row(user_payload, flat_cols, df.columns)
 
-    # compute prediction + comps
+    # compute prediction (model-only)
     model_price = None
     if model_loaded:
         try:
@@ -421,13 +443,7 @@ def show():
         except Exception:
             model_price = None
 
-    (est, ci), trend = (None, None), None
-    if model_price is None:
-        comp = comps_estimate(df, town, flat_type, area, lease, mrt_km)
-        if comp is not None and comp[0] is not None:
-            (est, ci), trend = comp
-
-    price_to_show = model_price if model_price is not None else est
+    price_to_show = model_price
 
     # kpi header row
     c1, c2, c3, c4 = st.columns([1.2, 1, 1, 1])
@@ -478,8 +494,9 @@ def show():
     if "nearest_mrt_distance_km" in comp_df.columns:
         comp_df = comp_df[comp_df["nearest_mrt_distance_km"] <= mrt_km]
 
-    # Prepare trend data
-    if (trend is None or trend.empty) and ft_col in df.columns:
+    # Prepare trend data (independent of price mode)
+    trend = None
+    if ft_col in df.columns:
         broader = df[(df["town"] == town)] if "town" in df.columns else df
         if ft_col in broader.columns:
             broader = broader[broader[ft_col]]
