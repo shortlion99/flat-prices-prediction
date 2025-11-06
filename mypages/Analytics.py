@@ -157,7 +157,7 @@ def load_data(
 
 
 @st.cache_resource(show_spinner=False)
-def load_model(path: str = "models/best_xgboost_model.pkl"):
+def load_model(path: str = "models/best_rf_pipeline.pkl"):
     """Load the trained model using joblib (important!)"""
     try:
         model = joblib.load(path)
@@ -353,30 +353,63 @@ def show():
     st.markdown(
         """
         <style>
-          :root { --card-bg: #ffffff; --muted: #6b7280; --border: #e5e7eb; --brand: #6366f1; }
-          .kpi { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--card-bg); text-align: center; }
-          .kpi .label { font-size: 12px; color: var(--muted); }
-          .kpi .value { font-size: 28px; font-weight: 800; margin-top: 6px; }
-          .kpi .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
-          .card { border: 1px solid var(--border); border-radius: 12px; padding: 20px; background: var(--card-bg); margin-bottom: 20px; min-height: 10px; display: flex; flex-direction: column; }
-          .card h3 { margin: 0 0 0 0; font-size: 16px; font-weight: 600; }
-          .card-content { flex: 1; }
-          .section { margin-top: 12px; }
-          /* Add spacing between KPI banner and first row */
-          .kpi { margin-bottom: 30px; }
-          /* Force consistent heights for charts and maps */
-          .stAltair, .stAltair > div, .stAltair canvas, .stAltair svg { height: 300px !important; max-height: 300px !important; }
-          .js-plotly-plot { height: 300px !important; max-height: 300px !important; }
-          [data-testid="stPydeckChart"], [data-testid="stPydeckChart"] > div { height: 300px !important; max-height: 300px !important; }
-          /* More aggressive targeting for card contents */
-          .card .stAltair, .card .stAltair > div, .card .stAltair canvas, .card .stAltair svg { height: 300px !important; max-height: 300px !important; min-height: 300px !important; }
-          .card [data-testid="stPydeckChart"], .card [data-testid="stPydeckChart"] > div { height: 300px !important; max-height: 300px !important; min-height: 300px !important; }
-          /* Target the specific chart containers */
-          .card-content .stAltair, .card-content .stAltair svg { height: 300px !important; max-height: 300px !important; }
-          .card-content [data-testid="stPydeckChart"] { height: 300px !important; max-height: 300px !important; }
-          /* Force SVG elements to specific height */
-          .card svg.marks { height: 300px !important; max-height: 300px !important; }
-          .stAltair svg { height: 300px !important; max-height: 300px !important; }
+        
+        :root { --card-bg: #ffffff; --muted: #6b7280; --border: #e5e7eb; --brand: #6366f1; }
+        .kpi { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--card-bg); text-align: center; }
+        .kpi .label { font-size: 12px; color: var(--muted); }
+        .kpi .value { font-size: 28px; font-weight: 800; margin-top: 6px; }
+        .kpi .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+        .card { border: 1px solid var(--border); border-radius: 12px; padding: 20px; background: var(--card-bg); margin-bottom: 20px; min-height: 10px; display: flex; flex-direction: column; }
+        .card h3 { margin: 0 0 0 0; font-size: 16px; font-weight: 600; }
+        .card-content { flex: 1; }
+        .section { margin-top: 12px; }
+        /* Add spacing between KPI banner and first row */
+        .kpi { margin-bottom: 30px; }
+        /* Force consistent heights for charts and maps */
+        .stAltair, .stAltair > div, .stAltair canvas, .stAltair svg { height: 300px !important; max-height: 300px !important; }
+        .js-plotly-plot { height: 300px !important; max-height: 300px !important; }
+        [data-testid="stPydeckChart"], [data-testid="stPydeckChart"] > div { height: 300px !important; max-height: 300px !important; }
+        /* More aggressive targeting for card contents */
+        .card .stAltair, .card .stAltair > div, .card .stAltair canvas, .card .stAltair svg { height: 300px !important; max-height: 300px !important; min-height: 300px !important; }
+        .card [data-testid="stPydeckChart"], .card [data-testid="stPydeckChart"] > div { height: 300px !important; max-height: 300px !important; min-height: 300px !important; }
+        /* Target the specific chart containers */
+        .card-content .stAltair, .card-content .stAltair svg { height: 300px !important; max-height: 300px !important; }
+        .card-content [data-testid="stPydeckChart"] { height: 300px !important; max-height: 300px !important; }
+        /* Force SVG elements to specific height */
+        .card svg.marks { height: 300px !important; max-height: 300px !important; }
+        .stAltair svg { height: 300px !important; max-height: 300px !important; }
+
+
+        /* Hide the default text */
+        [data-testid="stIconMaterial"] {
+        position: relative;
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        color: transparent !important;
+        font-size: 0 !important;
+        width: 24px;
+        overflow: visible !important;
+        }
+
+        /* Base: left arrow when open */
+        [data-testid="stIconMaterial"]::before {
+        content: "❮";
+        color: #6b7280 !important;
+        font-family: system-ui, sans-serif;
+        font-size: 20px !important;
+        font-weight: 700;
+        transition: transform 0.2s ease;
+        }
+
+        [data-testid="stIconMaterial"][title="keyboard_double_arrow_right"]::before,
+        [data-testid="stIconMaterial"][aria-label="keyboard_double_arrow_right"]::before,
+        [data-testid="stIconMaterial"]:where([data-testid="stIconMaterial"]:not([title])):after {
+        content: "❯";
+        }
+
+
+            
         </style>
         """,
         unsafe_allow_html=True,
@@ -384,7 +417,7 @@ def show():
 
     # data + model (aligned with Overview via DuckDB)
     df, flat_cols, flat_types = load_data("data/hdb_df_geocoded_condensed.duckdb")
-    model = load_model("models/best_xgboost_model.pkl")
+    model = load_model("models/best_rf_pipeline.pkl")
     model_loaded = model is not None
 
     # sidebar filters
@@ -439,8 +472,11 @@ def show():
     if model_loaded:
         try:
             X_for_model = _align_features_to_model(X_user, model)
-            model_price = float(model.predict(X_for_model)[0])
-        except Exception:
+            price_per_sqm = float(model.predict(X_for_model)[0])
+            # multiply by user-selected area
+            model_price = price_per_sqm * user_payload["floor_area_sqm"]
+        except Exception as e:
+            st.warning(f"Prediction error: {e}")
             model_price = None
 
     price_to_show = model_price
@@ -736,7 +772,45 @@ def show():
 
     with st.sidebar:
         st.markdown("---")
+        # Model details line
+        if model_loaded:
+            try:
+                if hasattr(model, "named_steps"):
+                    _last_est = list(model.named_steps.values())[-1]
+                    _est_name = _last_est.__class__.__name__
+                elif hasattr(model, "steps"):
+                    _est_name = model.steps[-1][1].__class__.__name__
+                else:
+                    _est_name = model.__class__.__name__
+            except Exception:
+                _est_name = model.__class__.__name__
+            _feat_cnt = (
+                len(getattr(model, "feature_names_in_", []))
+                if hasattr(model, "feature_names_in_")
+                else None
+            )
+            model_info = f"Model: `models/best_rf_pipeline.pkl` ({_est_name})" + (
+                f" · features: {_feat_cnt}" if _feat_cnt is not None else ""
+            )
+        else:
+            model_info = "Model: not loaded"
+
         st.caption(
-            "Data: `data/hdb_df_geocoded_condensed.csv`\n\n"
-            + ("Model: loaded" if model_loaded else "Model: not loaded")
+            "Test View\n\n Data: `data/hdb_df_geocoded_condensed.duckdb`\n\n"
+            + model_info
         )
+
+        if (
+            model_loaded
+            and hasattr(model, "feature_names_in_")
+            and len(model.feature_names_in_) > 0
+        ):
+            # Use st.toggle to create a checkbox/toggle that controls visibility
+            show_features = st.toggle("Show model features", value=False)
+
+            # Use a container to hold the content, which only shows if the toggle is active
+            if show_features:
+                st.dataframe(
+                    pd.DataFrame({"Feature": list(model.feature_names_in_)}),
+                    use_container_width=True,
+                )
