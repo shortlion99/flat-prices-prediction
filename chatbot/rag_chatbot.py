@@ -8,20 +8,6 @@ Features:
 - Persistent vector storage with ChromaDB
 - Automatic embedding caching and invalidation
 
-Usage:
-    from rag_chatbot import RAGChatbot
-    
-    # Initialize the chatbot
-    bot = RAGChatbot()
-    
-    # Single question
-    response = bot.chat("Tell me about Yishun")
-    print(response)
-    
-    # Conversation with memory
-    conversation = bot.start_conversation()
-    response1 = bot.chat("Tell me about Yishun", conversation)
-    response2 = bot.chat("What about housing prices there?", conversation)
 """
 
 import os
@@ -29,8 +15,8 @@ import json
 import hashlib
 import time
 
-# Suppress HuggingFace symlink warning on Windows
-os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1" # Suppress HuggingFace logging warning on Windows
+
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from dotenv import load_dotenv
@@ -44,34 +30,28 @@ from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import MessagesState, StateGraph, END
 from langgraph.prebuilt import ToolNode, tools_condition
-
 from langchain_chroma import Chroma
     
 
 
 class RAGChatbot:
     """
-    A RAG chatbot for Singapore housing information.
-    
-    This class encapsulates the entire RAG pipeline including:
-    - Document loading and processing
-    - Vector store creation
-    - LangGraph workflow
-    - Chat interface
+    RAG QA workflow 
     """
-    # Data-path parameter required
+    # Initialise chatbot and create environment ===================================================================
+    
     def __init__(self, data_file, env_file: str = ".env", vector_store_dir: str = "../data/hdb_rag/vector_stores"):
         """
         Initialize the RAG chatbot.
         
         Args:
-            data_file: Path(s) to JSON file(s) containing housing data. 
+            data_file (required): Path(s) to JSON file(s) containing housing data. 
                       Can be a single string or list of strings for multiple files.
                       Example: "data.json" or ["data1.json", "data2.json"]
-            env_file: Path to the .env file containing API keys
-            vector_store_dir: Directory to store/load cached vector embeddings
+            env_file (default: .env): Path to the .env file containing API keys
+            vector_store_dir (default: ../data/hdb_rag/vector_stores): Directory to store/load cached vector embeddings
         """
-        # Convert single file to list for uniform processing
+        # Create list of data files
         if isinstance(data_file, str):
             self.data_files = [data_file]
         elif isinstance(data_file, list):
@@ -93,10 +73,12 @@ class RAGChatbot:
         print("✅ RAG Chatbot initialized successfully!")
     
     def _load_environment(self):
-        """Load environment variables from .env file."""
+        """
+        Load environment variables from .env file for API usage.
+        """
         load_dotenv(self.env_file)
         
-        # Verify required environment variables
+        # Verify required environment variables -- Mistral API key needed for llm calls
         required_vars = ["MISTRAL_API_KEY"]
         missing_vars = []
         
@@ -110,29 +92,32 @@ class RAGChatbot:
         # Set environment variables
         os.environ["MISTRAL_API_KEY"] = os.getenv("MISTRAL_API_KEY")
         
-        # Optional: LangSmith tracing
+        # Optional: LangSmith tracing for debugging
         if os.getenv("LANGSMITH_API_KEY"):
             os.environ["LANGSMITH_TRACING"] = "true"
             os.environ["LANGSMITH_API_KEY"] = os.getenv("LANGSMITH_API_KEY")
     
     def _initialize_models(self):
-        """Initialize the LLM and embeddings models."""
+        """
+        Initialize the LLM and embeddings models.
+        """
         try:
             self.llm = init_chat_model("mistral-large-latest", model_provider="mistralai")
-            # Use local Sentence Transformers - no API calls, no rate limits!
             self.embeddings = HuggingFaceEmbeddings(
                 model_name='all-MiniLM-L6-v2',
-                model_kwargs={'device': 'cpu'},  # Use 'cuda' if you have GPU
+                model_kwargs={'device': 'cpu'},  
                 encode_kwargs={'normalize_embeddings': True}
             )
-            print("✅ Models initialized successfully (LLM: Mistral, Embeddings: Local Sentence Transformers)")
+            print("Models initialized successfully (LLM: Mistral, Embeddings: Local Sentence Transformers)")
         except Exception as e:
             raise RuntimeError(f"Failed to initialize models: {e}")
     
-    # vector store management =====================================================================
+    # Vector store management =====================================================================================
+
     def _get_data_hash(self) -> str:
-        """Generate a hash of the data files to detect changes.
-           Ensures that any modification to data files results in a new vector store.
+        """
+        Generate a hash of the data files to detect changes.
+        Ensures that any modification to data files results in a new vector store, when embedding the data.
         """
         hasher = hashlib.md5()
         
@@ -149,71 +134,74 @@ class RAGChatbot:
     
     
     def _load_or_create_vector_store(self):
-        """Load existing vector store or create new one if needed."""
+        """
+        Load existing vector store or create new one if needed.
+        """
         # Create vector store directory if it doesn't exist
         self.vector_store_dir.mkdir(parents=True, exist_ok=True)
         
         # Generate hash of current data files
         data_hash = self._get_data_hash()
         
-        # Use persistent Chroma vector store
+        # Load persistent Chroma vector store if using same dataset as before
         chroma_dir = self.vector_store_dir / f"chroma_{data_hash}"
         if chroma_dir.exists() and any(chroma_dir.iterdir()):
             try:
-                print(f"📦 Loading persistent Chroma vector store from: {chroma_dir}")
+                print(f"Loading persistent Chroma vector store from: {chroma_dir}")
                 self.vector_store = Chroma(
                     persist_directory=str(chroma_dir),
                     embedding_function=self.embeddings
                 )
-                print(f"✅ Loaded persistent vector store")
                 return
             except Exception as e:
-                print(f"⚠️ Failed to load Chroma vector store: {e}")
+                print(f"Failed to load Chroma vector store: {e}")
         
-        # Create new Chroma vector store
-        print("🆕 Creating new vector store from data files...")
+        # Create new Chroma vector store if using dataset for the first time
         documents = self._load_and_process_data()
         
-        print(f"💾 Creating persistent Chroma vector store at: {chroma_dir}")
+        print(f"Creating persistent Chroma vector store at: {chroma_dir}")
         self.vector_store = Chroma(
             persist_directory=str(chroma_dir),
             embedding_function=self.embeddings
         )
         self.vector_store.add_documents(documents)
         
-        # Clean up old vector stores
+        # Clean up old vector stores -- maintain only the latest one
         self._cleanup_old_vector_stores(data_hash)
         
-        print(f"✅ Persistent vector store created with {len(documents)} document chunks")
+        print(f"Persistent vector store created with {len(documents)} document chunks")
         
         
-    # Replace old vector store with new one -- reduce disk usage and confusion
     def _cleanup_old_vector_stores(self, current_hash: str):
-        """Remove old vector store directories to save disk space."""
+        """
+        Remove old vector store directories to save disk space and reduce confusion.
+        """
         try:
             for dir_path in self.vector_store_dir.glob("chroma_*"):
                 if current_hash not in dir_path.name:
                     import shutil
                     shutil.rmtree(dir_path)
-                    print(f"🗑️ Removed old vector store: {dir_path.name}")
+                    print(f"Removed old vector store: {dir_path.name}")
         except Exception as e:
-            print(f"⚠️ Failed to cleanup old vector stores: {e}")
+            print(f"Failed to cleanup old vector stores: {e}")
     
-    # Process data files for RAG pipeline
+
     def _load_and_process_data(self) -> list:
-        """Load and process the housing data from multiple files."""
+        """
+        Load and embed the housing data from multiple files.
+        """
         all_documents = []
         total_entries = 0
         
         for data_file in self.data_files:
             try:
-                print(f"📁 Loading data from: {data_file}")
+                print(f"Loading data from: {data_file}")
                 
                 # Load JSON data
                 with open(data_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 
-                # Convert to documents
+                # Convert to Document objects for usage in LangChain pipeline
                 file_documents = []
                 for entry in data:
                     area = entry["area"]
@@ -230,30 +218,35 @@ class RAGChatbot:
                 
                 all_documents.extend(file_documents)
                 total_entries += len(file_documents)
-                print(f"  ✅ Loaded {len(file_documents)} entries from {data_file}")
+                print(f"Loaded {len(file_documents)} entries from {data_file}")
                 
             except FileNotFoundError:
                 raise FileNotFoundError(f"Data file not found: {data_file}")
             except Exception as e:
                 raise RuntimeError(f"Failed to load data from {data_file}: {e}")
         
-        # Split all documents
+        # Split documents into chunks for retrieval and embedding
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
         json_splits = text_splitter.split_documents(all_documents)
         
-        print(f"✅ Successfully processed {total_entries} total entries from {len(self.data_files)} file(s)")
-        print(f"✅ Created {len(json_splits)} document chunks")
+        print(f"Successfully processed {total_entries} total entries from {len(self.data_files)} file(s)")
+        print(f"Created {len(json_splits)} document chunks")
         
         return json_splits
 
-    # RAG pipeline =============================================================================
+    # RAG pipeline ================================================================================================
+
     def _build_graph(self):
-        """Build the LangGraph workflow."""
-        
-        # Define the retrieve tool (needs to be instance method)
+        """
+        Build the LangGraph workflow.
+        """
+
+        # Define retrieve tool
         @tool(response_format="content_and_artifact")
         def retrieve(query: str):
-            """Retrieve information related to a query."""
+            """
+            Retrieve information related to a query.
+            """
             retrieved_docs = self.vector_store.similarity_search(query, k=2)
             serialized = "\n\n".join(
                 (f"Source: {doc.metadata}\nContent: {doc.page_content}")
@@ -266,14 +259,32 @@ class RAGChatbot:
         
         # Define workflow functions
         def query_or_respond(state: MessagesState):
-            """Generate tool call for retrieval or respond."""
-            llm_with_tools = self.llm.bind_tools([self.retrieve_tool])
-            response = llm_with_tools.invoke(state["messages"])
+            """
+            Generate tool call for retrieval or respond.
+            """
+            # Add system message to handle answering price prediction or analysis questions
+            system_message = SystemMessage(
+                content=(
+                    "You are an assistant for question-answering tasks on the housing market in Singapore. "
+                    "IMPORTANT: If the user asks about price prediction, price forecasting, future prices, "
+                    "or wants to predict HDB flat prices, respond with: "
+                    "'For price prediction and analytics, please refer to our dashboard which has advanced "
+                    "machine learning models for HDB price forecasting and comprehensive market analytics.' "
+                    "For other housing questions, use the retrieve tool to get relevant information."
+                )
+            )
+            
+            messages_with_system = [system_message] + state["messages"]
+
+            llm_with_tools = self.llm.bind_tools([self.retrieve_tool]) # give llm access to use retrieve tool if needed
+            response = llm_with_tools.invoke(messages_with_system)
             return {"messages": [response]}
         
         def generate(state: MessagesState):
-            """Generate answer using retrieved content."""
-            # Get recent tool messages
+            """
+            Generate answer using retrieved content.
+            """
+            # Get recent tool messages (content from retrievals)
             recent_tool_messages = []
             for message in reversed(state["messages"]):
                 if message.type == "tool":
@@ -282,7 +293,7 @@ class RAGChatbot:
                     break
             tool_messages = recent_tool_messages[::-1]
             
-            # Format into prompt
+            # Format prompt which includes retrieved content
             docs_content = "\n\n".join(doc.content for doc in tool_messages)
             system_message_content = (
                 "You are an assistant for question-answering tasks on the housing market in Singapore. "
@@ -310,19 +321,20 @@ class RAGChatbot:
         graph_builder.add_node("tools", tools)
         graph_builder.add_node("generate", generate)
         
+        # Start graph from 'query_or_respond' node
         graph_builder.set_entry_point("query_or_respond")
         graph_builder.add_conditional_edges(
             "query_or_respond",
-            tools_condition,
+            tools_condition, # determine whether or not to retrieve from dataset
             {END: END, "tools": "tools"},
         )
         graph_builder.add_edge("tools", "generate")
         graph_builder.add_edge("generate", END)
         
         self.graph = graph_builder.compile()
-        print("✅ Graph workflow built successfully")
+        print("Graph workflow built successfully")
 
-    # Chat functionality ============================================================================
+    # Chat functionality ==========================================================================================
     
     def chat(self, message: str, conversation_state: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -362,16 +374,16 @@ class RAGChatbot:
                 if "429" in error_str or "rate" in error_str or "capacity" in error_str:
                     if attempt < max_retries - 1:  # Don't sleep on last attempt
                         delay = base_delay * (2 ** attempt)  # Exponential backoff
-                        print(f"⚠️ Rate limit hit. Retrying in {delay} seconds... (attempt {attempt + 1}/{max_retries})")
+                        print(f"Rate limit hit. Retrying in {delay} seconds... (attempt {attempt + 1}/{max_retries})")
                         time.sleep(delay)
                         continue
                     else:
-                        return f"❌ Rate limit exceeded. Please try again in a few minutes. The service is currently at capacity."
+                        return f"Rate limit exceeded. Please try again in a few minutes. The service is currently at capacity."
                 else:
                     # Non-rate limit error
                     return f"Error: {str(e)}"
-        
-        return "❌ Failed after multiple attempts due to rate limiting."
+
+        return "Failed after multiple attempts due to rate limiting."
     
     def start_conversation(self) -> Dict[str, Any]:
         """
@@ -415,7 +427,7 @@ class RAGChatbot:
             if msg.type in ("human", "ai")
         ]
     
-# ==================================================================================================
+# =============================================================================================================
 
 # Convenience function for quick testing
 def quick_chat(message: str) -> str:
@@ -431,15 +443,15 @@ def quick_chat(message: str) -> str:
     bot = RAGChatbot()
     return bot.chat(message)
 
-# ==================================================================================================
+# =============================================================================================================
 
 if __name__ == "__main__":
     # Example usage when run directly
-    print("🤖 Singapore Housing RAG Chatbot")
+    print("Singapore Housing RAG Chatbot")
     print("=" * 50)
     
     try:
-        # Initialize chatbot
+        # Initialize chatbot with path to data file
         bot = RAGChatbot("../data/hdb_rag/singapore_hdb_data.json")
         
         # Start conversation
@@ -465,7 +477,7 @@ if __name__ == "__main__":
         print("3. All required packages installed")
 
 
-# ==== Streamlit adapter (simple, uses your class) ====
+# ==== Streamlit adapter  ====
 from pathlib import Path
 from dotenv import load_dotenv
 
