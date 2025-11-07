@@ -51,12 +51,17 @@ def render_altair(chart):
 def load_data(path: str = "data/hdb_df_geocoded_condensed.duckdb"):
     """Loads and preprocesses HDB data from DuckDB."""
     con = duckdb.connect(path)
+
     df = con.execute(
         """
         SELECT 
             month, town, flat_type, resale_price, price_per_sqm,
-            nearest_mrt_distance_km, nearest_supermarkets_distance_km,
-            nearest_schools_distance_km, floor_area_sqm,
+            nearest_mrt_distance_km, 
+            nearest_supermarkets_distance_km, 
+            nearest_schools_distance_km, 
+            nearest_childcare_distance_km, 
+            nearest_hawker_distance_km,    
+            floor_area_sqm,
             remaining_lease, latitude, longitude
         FROM resale
         """
@@ -152,30 +157,6 @@ def build_feature_row(
     return pd.DataFrame([row])
 
 
-def quick_forecast(trend_df: pd.DataFrame, years_ahead: int = 5):
-    """Performs a simple linear forecast based on historical median prices."""
-    if trend_df is None or trend_df.empty or len(trend_df) < 2:
-        return None
-
-    x = trend_df["year"].values
-    y = trend_df["resale_price"].values
-    slope, intercept = np.polyfit(x, y, 1)
-    future_years = np.arange(x.max() + 1, x.max() + 1 + years_ahead)
-    y_pred = intercept + slope * future_years
-
-    # Calculate standard deviation of residuals for confidence band
-    resid_std = np.std(y - (intercept + slope * x))
-
-    return pd.DataFrame(
-        {
-            "year": future_years,
-            "pred": y_pred,
-            "lo": y_pred - 1.96 * resid_std,
-            "hi": y_pred + 1.96 * resid_std,
-        }
-    )
-
-
 # ----------------------------------------------------------------------------------
 # 🏡 HDB Analytics Dashboard Function
 # ----------------------------------------------------------------------------------
@@ -187,7 +168,7 @@ def show():
     # --- Title and Caption ---
     st.title("🏡 HDB Analytics")
     st.caption(
-        "Use predictive models and time-series forecasts to estimate property prices based on location and attributes."
+        "Use predictive models and historical data to estimate property prices based on location and attributes."
     )
 
     # --- Custom CSS Styling (Enhanced for cleaner look) ---
@@ -233,7 +214,7 @@ def show():
     # 📝 SIDEBAR FILTERS
     # ====================================================================
     with st.sidebar:
-        st.header("🏠 Property Features ")
+        st.header("Property Features ")
 
         # Core property features
         town = st.selectbox("Town", sorted(df["town"].dropna().unique().tolist()))
@@ -244,7 +225,6 @@ def show():
         lease = st.slider("Remaining Lease (years)", 0, 99, 60)
 
         # Model Proximity Features (for price prediction)
-        st.subheader("🧠 Model Proximity Features")
         model_mrt_km = st.slider(
             "Nearest MRT Distance (km)", 0.0, 5.0, 1.0, 0.1, key="model_mrt"
         )
@@ -272,21 +252,6 @@ def show():
         )
 
         st.markdown("---")
-
-        st.header("📊 Historical Market Insights")
-        # Comparable Filters (used only for historical chart/map filtering)
-        comp_mrt_km = st.slider(
-            "Max Distance to MRT (km)", 0.0, 5.0, 1.0, 0.1, key="comp_mrt"
-        )
-        comp_schools_km = st.slider(
-            "Schools within (km)", 0.0, 5.0, 1.5, 0.1, key="comp_schools"
-        )
-        comp_supermarkets_km = st.slider(
-            "Supermarkets within (km)", 0.0, 5.0, 1.0, 0.1, key="comp_supermarkets"
-        )
-
-        st.markdown("---")
-        horizon = st.slider("Forecast Horizon (years)", 1, 10, 5)
 
     # --- Prepare Prediction Payload ---
     user_payload = {
@@ -401,21 +366,22 @@ def show():
         )
 
         # Row 3 (Full Width Placeholder): Time-Series Forecast
-        st.subheader("Time-Series Forecast (coming soon)")
+        st.subheader("Time-Series Forecast (Future Feature)")
         st.caption(
-            "This section will show predicted price trends using an ARIMA/Prophet model trained on time-series data."
+            "This section is currently disabled. Only historical trends are shown."
         )
 
     # ====================================================================
     st.header("📊 Historical Market Insights")
     # ====================================================================
     with st.container(border=True):
-        # --- Data Filtering based on COMP Filters ---
+        # --- PREPARE DATASETS ---
+        # 1. Tightly Filtered Comparables (used only for the bottom table)
         norm_ft = _norm_flat_label(flat_type)
         ft_col = "flat_type_" + norm_ft.replace(" ", "_")
         comp_df = df.copy()
 
-        # Apply core filters
+        # Apply core filters (Town, Type, Size, Lease)
         comp_df = comp_df[comp_df["town"] == town]
         if ft_col in comp_df.columns:
             comp_df = comp_df[comp_df[ft_col]]
@@ -424,16 +390,13 @@ def show():
             comp_df["remaining_lease"].between(max(0, lease - 10), min(99, lease + 10))
         ]
 
-        # Apply COMPARABLE FILTERS
-        comp_df = comp_df[comp_df["nearest_mrt_distance_km"] <= comp_mrt_km]
-        comp_df = comp_df[comp_df["nearest_schools_distance_km"] <= comp_schools_km]
-        comp_df = comp_df[
-            comp_df["nearest_supermarkets_distance_km"] <= comp_supermarkets_km
-        ]
+        # 2. Town-Wide Price Distribution Data (Used for Histogram and Map)
+        price_dist_df = df[df["town"] == town].copy()
 
-        # --- Trend Data (Uses Model Filters for trend scope) ---
+        # 3. Trend Data (Tightly filtered by Town and Flat Type for historical median trend)
         trend = None
         if ft_col in df.columns:
+            # Note: We use the 'broader' scope defined previously which filters by town and flat type
             broader = df[(df["town"] == town)]
             if ft_col in broader.columns:
                 broader = broader[broader[ft_col]]
@@ -444,13 +407,18 @@ def show():
                     .sort_values("year")
                 )
 
-        # Row 1: Comparable distribution + map
+        # Row 1: Town-Wide Price distribution + map (USES price_dist_df)
         col1_hist, col2_hist = st.columns([2, 1])
         with col1_hist:
-            st.subheader("Comparable Price Distribution")
-            if not comp_df.empty and "resale_price" in comp_df.columns:
+            st.subheader(f"{town} Resale Price Distribution")
+            st.caption(
+                "Shows all resale transactions in the town, regardless of size or type."
+            )
+            if not price_dist_df.empty and "resale_price" in price_dist_df.columns:
                 hist = (
-                    alt.Chart(comp_df)
+                    alt.Chart(
+                        price_dist_df
+                    )  # *** SOURCE CHANGE: Using town-wide data ***
                     .mark_bar()
                     .encode(
                         x=alt.X(
@@ -464,28 +432,86 @@ def show():
                     .properties(height=450)  # Taller height for visibility
                 )
                 render_altair(hist)
-                st.caption(f"Showing {len(comp_df)} comparable transactions.")
+                st.caption(
+                    f"Showing {len(price_dist_df):,} total transactions in {town}."
+                )
             else:
-                st.info("No comparable transactions under current filters.")
+                st.info(f"No price data available for {town}.")
 
         with col2_hist:
-            st.subheader(f"{town} Map")
+            # --- Map Controls & Title ---
+            map_header_col, map_toggle_col = st.columns([2, 1])
+            with map_header_col:
+                st.subheader(f"{town} Map")
+
+            with map_toggle_col:
+                # 1. Toggle for Map View
+                use_comp_data = st.toggle(
+                    "Show Comparables Only",
+                    value=False,
+                    help="Switch between all town transactions (default) and the tightly filtered comparable sales.",
+                )
+
             try:
-                if town and not comp_df.empty:
-                    # Use a subset of comparables for faster map loading
+                # 2. Conditional Data Source Selection
+                if use_comp_data:
+                    current_map_df_source = comp_df
+                    map_view_label = "Comparable Sales"
+                else:
+                    current_map_df_source = price_dist_df
+                    map_view_label = "Town Transactions"
+
+                # Check if a town is selected (always true after the sidebar)
+                if town:
+                    st.caption(f"Displaying **{map_view_label}** on the map.")
+
+                    # Ensure data is available
                     map_df = (
-                        comp_df[["latitude", "longitude", "resale_price"]]
-                        .dropna()
+                        current_map_df_source.dropna(subset=["latitude", "longitude"])
                         .head(1000)
+                        .copy()
                     )
 
                     if not map_df.empty:
+                        # 3. Preprocessing for the tooltip
+                        map_df["resale_price_k"] = (
+                            map_df["resale_price"] / 1000
+                        ).round(0)
+                        map_df["price_per_sqm"] = map_df["price_per_sqm"].round(0)
+                        map_df["floor_area_sqm"] = map_df["floor_area_sqm"].round(0)
+
+                        map_df["month_str"] = pd.to_datetime(
+                            map_df["month"], errors="coerce"
+                        ).dt.strftime("%b %Y")
+                        map_df["lease_str"] = (
+                            map_df["remaining_lease"].round(0).astype(str) + " yrs"
+                        )
+
+                        # FIX: Round ALL distances to prevent long float strings in the tooltip
+                        map_df["nearest_mrt_distance_km"] = map_df[
+                            "nearest_mrt_distance_km"
+                        ].round(2)
+                        map_df["nearest_schools_distance_km"] = map_df[
+                            "nearest_schools_distance_km"
+                        ].round(2)
+                        # --- ADDED: Childcare, Supermarket, Hawker ---
+                        map_df["nearest_childcare_distance_km"] = map_df[
+                            "nearest_childcare_distance_km"
+                        ].round(2)
+                        map_df["nearest_supermarkets_distance_km"] = map_df[
+                            "nearest_supermarkets_distance_km"
+                        ].round(2)
+                        map_df["nearest_hawker_distance_km"] = map_df[
+                            "nearest_hawker_distance_km"
+                        ].round(2)
+
+                        # --- PyDeck Rendering ---
                         layer = pdk.Layer(
                             "ScatterplotLayer",
                             data=map_df,
                             get_position=["longitude", "latitude"],
-                            get_radius=80,  # Slightly larger radius
-                            get_fill_color=[170, 0, 0, 180],  # Darker, impactful color
+                            get_radius=80,
+                            get_fill_color=[170, 0, 0, 180],
                             pickable=True,
                         )
                         view_state = pdk.ViewState(
@@ -493,20 +519,48 @@ def show():
                             longitude=float(map_df["longitude"].mean()),
                             zoom=11.5,
                         )
+
+                        # --- CRITICAL FIX: Simplify Tooltip HTML formatting ---
+                        map_tooltip = {
+                            "html": """
+                                <div style="font-size: 13px; padding: 6px; color: #222;">
+                                    <b>📅 Month:</b> {month_str} <br/>
+                                    <b>💰 Price:</b> ${resale_price_k}k <br/>
+                                    <b>📐 Price/sqm:</b> ${price_per_sqm} <br/>
+                                    <b>🏠 Flat:</b> {flat_type}, {floor_area_sqm} sqm <br/>
+                                    <b>⏳ Lease Left:</b> {lease_str} <br/>
+                                    <b>🚇 MRT Dist:</b> {nearest_mrt_distance_km} km <br/>
+                                    <b>🏫 School Dist:</b> {nearest_schools_distance_km} km <br/>
+                                    <b>👶 Childcare Dist:</b> {nearest_childcare_distance_km} km <br/>
+                                    <b>🛒 Supermarket Dist:</b> {nearest_supermarkets_distance_km} km <br/>
+                                    <b>🍜 Hawker Dist:</b> {nearest_hawker_distance_km} km
+                                </div>
+                            """,
+                            "style": {
+                                "backgroundColor": "rgba(255, 255, 255, 0.9)",
+                                "color": "black",
+                                "border-radius": "6px",
+                            },
+                        }
+
                         st.pydeck_chart(
                             pdk.Deck(
                                 map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
                                 initial_view_state=view_state,
                                 layers=[layer],
-                                tooltip={
-                                    "html": "<b>Price:</b> {resale_price:,.0f} SGD"
-                                },
+                                tooltip=map_tooltip,
                             )
                         )
                     else:
-                        st.info("No geocoded comparables found for map view.")
+                        # 4. TARGETED ERROR MESSAGE
+                        if use_comp_data:
+                            st.info(
+                                "No **comparable** transactions found under current filters. Try relaxing the proximity or adjust the size filters in the sidebar, or toggle the map view off."
+                            )
+                        else:
+                            st.info(f"No geocoded data found for map view in {town}.")
                 else:
-                    st.info("Select a town and filters to view the map.")
+                    st.info("Select a town to view the map.")
             except Exception as e:
                 st.error(f"Map rendering error: {e}")
 
@@ -515,10 +569,10 @@ def show():
             unsafe_allow_html=True,
         )
 
-        # Row 2: Forecasted trend + insights
+        # Row 2: Historical trend + insights (USES trend)
         col1_trend, col2_trend = st.columns([2, 1])
         with col1_trend:
-            st.subheader("Forecasted Price Trend")
+            st.subheader(f"Historical Median Price Trend ({flat_type})")
             if trend is not None and not trend.empty:
                 trend = trend.dropna(subset=["year"]).copy()
                 trend["year"] = trend["year"].astype(int)
@@ -537,35 +591,7 @@ def show():
                     )
                 )
 
-                fc = quick_forecast(trend, years_ahead=horizon)
-                if fc is not None and not fc.empty:
-                    fc = fc.copy()
-                    fc["year"] = fc["year"].astype(int)
-                    fc["date"] = pd.to_datetime(fc["year"], format="%Y")
-
-                    band = (
-                        alt.Chart(fc)
-                        .mark_area(opacity=0.3, color="#BCCBD9")
-                        .encode(
-                            x=alt.X("date:T"),
-                            y=alt.Y("lo:Q", title="Price"),
-                            y2="hi:Q",
-                        )
-                    )
-                    line_pred = (
-                        alt.Chart(fc)
-                        .mark_line(
-                            color="#A8201A", strokeDash=[5, 5]
-                        )  # Dashed line for forecast
-                        .encode(
-                            x=alt.X("date:T"),
-                            y=alt.Y("pred:Q"),
-                            tooltip=["year:O", alt.Tooltip("pred:Q", format=",.0f")],
-                        )
-                    )
-                    render_altair(band + line_hist + line_pred)
-                else:
-                    render_altair(line_hist)
+                render_altair(line_hist)
             else:
                 st.info("Insufficient data for trend analysis.")
 
@@ -593,16 +619,7 @@ def show():
                         f"- **Recent trend:** **{trend_direction}** ({recent_trend:+.1f}% annually)"
                     )
 
-                fc = quick_forecast(trend, years_ahead=horizon)
-                if fc is not None and not fc.empty:
-                    future_price = fc["pred"].iloc[-1]
-                    current_price = trend["resale_price"].iloc[-1]
-                    price_change = (
-                        (future_price - current_price) / current_price
-                    ) * 100
-                    st.markdown(
-                        f"- **{horizon}-year outlook:** **{price_change:+.1f}% change** expected"
-                    )
+                st.markdown("- **Outlook:** Focused on historical data only.")
             else:
                 st.info("Insufficient data for trend insights.")
 
@@ -611,35 +628,52 @@ def show():
             unsafe_allow_html=True,
         )
 
-        # Row 3: Recent comparable sales table
-        st.subheader("Recent Comparable Sales")
+        # Row 3: Recent comparable sales table (USES comp_df)
+        st.subheader("Recent Closely Comparable Sales")
+        st.caption(
+            "Transactions matching the specific size, type, lease, and proximity filters."
+        )
         if not comp_df.empty:
+            # --- UPDATED: ADD ALL PROXIMITY FEATURES TO THE DISPLAY COLUMNS ---
             cols_to_show = [
                 "month",
-                "town",
                 "floor_area_sqm",
                 "remaining_lease",
                 "nearest_mrt_distance_km",
+                "nearest_schools_distance_km",
+                "nearest_childcare_distance_km",
+                "nearest_supermarkets_distance_km",
+                "nearest_hawker_distance_km",
                 "resale_price",
             ]
+            # ------------------------------------------------------------------
+
             recent = comp_df.sort_values("month", ascending=False)[cols_to_show].head(
                 15
             )
             if not recent.empty:
+                # Rounding the distance columns for cleaner table view
+                format_dict = {
+                    "resale_price": "SGD {:,}",
+                    "month": "{:%Y-%m}",
+                    "nearest_mrt_distance_km": "{:.2f} km",
+                    "nearest_schools_distance_km": "{:.2f} km",
+                    "nearest_childcare_distance_km": "{:.2f} km",
+                    "nearest_supermarkets_distance_km": "{:.2f} km",
+                    "nearest_hawker_distance_km": "{:.2f} km",
+                }
+
                 st.dataframe(
-                    recent.style.format(
-                        {"resale_price": "SGD {:,}", "month": "{:%Y-%m}"}
-                    ),
+                    recent.style.format(format_dict),
                     use_container_width=True,
                 )
             else:
-                st.info("No recent comparable sales.")
+                st.info("No recent comparable sales matching all filters.")
         else:
             st.info("No comparable transactions under current filters.")
 
     # Sidebar footer (model info)
     with st.sidebar:
-        st.markdown("---")
         if model_loaded:
             try:
                 _last_est = (
