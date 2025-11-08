@@ -1,6 +1,5 @@
 import streamlit as st
-import duckdb
-import pandas as pd
+from data.data_access import get_duckdb_conn
 from components.price_trends import show_price_trends
 from components.flat_distribution import show_flat_distribution
 from components.latest_snapshot import latest_snapshot
@@ -8,9 +7,9 @@ from components.map_overview import show_map
 from components.resale_price_distribution import show_resale_price_distribution
 from components.resale_price_relationships import show_relationship
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def load_data():
-    con = duckdb.connect("data/hdb_df_geocoded_condensed.duckdb")
+    con = get_duckdb_conn()
     return con.execute("""
         SELECT 
             month, town, flat_type, region, flat_model,
