@@ -426,7 +426,7 @@ def show():
                         y=alt.Y("count():Q", title="Count"),
                         tooltip=["resale_price:Q", "count():Q"],
                     )
-                    .properties(height=450)  # Taller height for visibility
+                    .properties(height=550)  # Taller height for visibility
                 )
                 render_altair(hist)
                 st.caption(
