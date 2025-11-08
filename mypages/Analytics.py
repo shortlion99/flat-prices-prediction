@@ -711,7 +711,11 @@ def show():
             help_text=f"{town} · {flat_type}",
         )
     with c2:
-        _kpi(f"{area:.0f} sqm", "Size", help_text="Floor area", color=PALETTE["accent"])
+        _kpi(
+            f"{area:.0f} sqm",
+            "Size",
+            help_text="Floor area",
+        )
     with c3:
         _kpi(f"{lease} yrs", "Remaining Lease", help_text="User-selected")
     with c4:
