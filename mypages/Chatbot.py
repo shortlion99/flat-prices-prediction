@@ -62,14 +62,14 @@ def show():
             margin-bottom: 1rem;
         }
         .user-msg {
-            background-color: #FEC9D1;
+            background-color: #950606;
             padding: 8px 12px;
             border-radius: 10px;
             margin: 5px 0;
             text-align: right;
+            color: white;
         }
         .bot-msg {
-            background-color: #E5E5EA;
             padding: 8px 12px;
             border-radius: 10px;
             margin: 5px 0;
