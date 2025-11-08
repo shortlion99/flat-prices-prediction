@@ -6,7 +6,61 @@ from data.data_access import get_duckdb_conn
 import altair as alt
 import pydeck as pdk
 
-# --- TOWN TO REGION MAPPING ---
+# ============================================================
+# Global Visual Theme (Altair + CSS)
+# ============================================================
+
+PALETTE = {
+    "brand": "#4F46E5",  # indigo-600
+    "brand_soft": "#A5B4FC",  # indigo-300
+    "ink": "#0F172A",  # slate-900
+    "muted": "#6B7280",  # gray-500
+    "bg": "#F8FAFC",  # slate-50
+    "card": "#FFFFFF",  # white
+    "border": "#E5E7EB",  # gray-200
+    "accent": "#06B6D4",  # cyan-500
+    "accent_soft": "#CFFAFE",  # cyan-100
+    "warn": "#F59E0B",  # amber-500
+    "danger": "#EF4444",  # red-500
+    "ok": "#10B981",  # emerald-500
+}
+
+
+def _set_altair_theme():
+    alt.themes.register(
+        "hdb_theme",
+        lambda: {
+            "config": {
+                "font": "Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif",
+                "range": {
+                    "category": [
+                        PALETTE["brand"],
+                        "#111827",
+                        PALETTE["accent"],
+                        "#9CA3AF",
+                    ]
+                },
+                "axis": {
+                    "labelColor": PALETTE["ink"],
+                    "titleColor": PALETTE["ink"],
+                    "gridColor": PALETTE["border"],
+                    "labelFontSize": 11,
+                    "titleFontSize": 12,
+                },
+                "legend": {"labelColor": PALETTE["ink"], "titleColor": PALETTE["ink"]},
+                "view": {"stroke": None},
+            }
+        },
+    )
+    alt.themes.enable("hdb_theme")
+
+
+_set_altair_theme()
+
+# ============================================================
+# TOWN TO REGION
+# ============================================================
+
 TOWN_TO_REGION = {
     "ANG MO KIO": "region_Central",
     "BEDOK": "region_East",
@@ -36,18 +90,45 @@ TOWN_TO_REGION = {
     "YISHUN": "region_North",
 }
 
+# ============================================================
+# Helpers
+# ============================================================
+
 
 def _norm_flat_label(s: str) -> str:
-    """Normalizes flat type string for consistent lookup."""
     return str(s).strip().upper().replace("-", " ").replace("/", " ").replace("  ", " ")
 
 
+def fmt_money(x):
+    try:
+        return f"SGD {x:,.0f}"
+    except Exception:
+        return "SGD —"
+
+
 def render_altair(chart):
-    """Renders Altair chart with container width."""
     return st.altair_chart(chart, use_container_width=True)
 
 
-@st.cache_data(show_spinner="Loading data and preparing features...")
+def _kpi(value, label, help_text=None, color=PALETTE["ink"]):
+    st.markdown(
+        f"""
+        <div class='kpi'>
+            <div class='label'>{label}</div>
+            <div class='value' style='color:{color}'>{value}</div>
+            {f"<div class='hint'>{help_text}</div>" if help_text else ""}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# Data + Models
+# ============================================================
+
+
+@st.cache_data(show_spinner="Loading data and preparing features…")
 def load_data():
     con = get_duckdb_conn()
     df = con.execute(
@@ -60,30 +141,27 @@ def load_data():
             nearest_childcare_distance_km, 
             nearest_hawker_distance_km,    
             floor_area_sqm,
-            remaining_lease, latitude, longitude
+            remaining_lease, latitude, longitude,
+            district_number
         FROM resale
         """
     ).df()
 
-    # Create year column
     if "month" in df.columns:
-        df["month"] = pd.to_datetime(df["month"], errors="coerce")
+        df["month"] = pd.to_datetime(df["month"], errors="coerce").dt.normalize()
         df["year"] = df["month"].dt.year
     else:
         df["year"] = np.nan
 
-    # Create Flat Type Dummies (essential for model and filtering)
-    source_col = "flat_type" if "flat_type" in df.columns else None
-    if source_col:
-        df["_flat_norm"] = df[source_col].map(_norm_flat_label)
+    if "flat_type" in df.columns:
+        df["_flat_norm"] = df["flat_type"].map(_norm_flat_label)
         dummies = pd.get_dummies(df["_flat_norm"], prefix="flat_type")
-        dummies.columns = [col.replace(" ", "_") for col in dummies.columns]
+        dummies.columns = [c.replace(" ", "_") for c in dummies.columns]
         df = pd.concat([df.drop(columns=["_flat_norm"]), dummies], axis=1)
 
-    flat_cols = [col for col in df.columns if col.startswith("flat_type_")]
-    flat_types = [col.replace("flat_type_", "").replace("_", " ") for col in flat_cols]
+    flat_cols = [c for c in df.columns if c.startswith("flat_type_")]
+    flat_types = [c.replace("flat_type_", "").replace("_", " ") for c in flat_cols]
 
-    # Create Region Dummies (if town column exists)
     if "town" in df.columns:
         region_series = df["town"].map(TOWN_TO_REGION)
         region_dummies = pd.get_dummies(region_series)
@@ -92,42 +170,39 @@ def load_data():
     return df, flat_cols, flat_types
 
 
-@st.cache_resource(show_spinner="Loading machine learning model...")
+@st.cache_resource(show_spinner="Loading machine learning model…")
 def load_model(path: str = "models/best_rf_pipeline.pkl"):
-    """Loads the fitted Scikit-learn pipeline model."""
     try:
-        model = joblib.load(path)
-        return model
-    except Exception as e:
+        return joblib.load(path)
+    except Exception:
+        return None
+
+
+@st.cache_resource(show_spinner="Loading time-series model (SARIMAX)…")
+def load_sarimax_model(path: str = "models/sarimax_flattype_district.pkl"):
+    try:
+        return joblib.load(path)
+    except Exception:
         return None
 
 
 def _align_features_to_model(X: pd.DataFrame, model) -> pd.DataFrame:
-    """Aligns the user feature DataFrame to the features the model expects."""
     if not hasattr(model, "feature_names_in_"):
         return X
-
-    # Creates a dictionary where keys are model features and values are the input values
     aligned = {
         name: X.get(name.replace(" ", "_"), 0.0) for name in model.feature_names_in_
     }
     X_aligned = pd.DataFrame(aligned)
-
-    # Ensure all boolean/dummy columns are float for the model
     for c in X_aligned.columns:
         if pd.api.types.is_bool_dtype(X_aligned[c]):
             X_aligned[c] = X_aligned[c].astype(float)
-
     return X_aligned.iloc[[0]]
 
 
 def build_feature_row(
     user: dict, flat_cols: list[str], df_columns: pd.Index
 ) -> pd.DataFrame:
-    """Builds a single row DataFrame for prediction based on user inputs."""
     row = pd.Series(0.0, index=df_columns, dtype="float64")
-
-    # Set continuous and proximity features
     for feature in [
         "floor_area_sqm",
         "remaining_lease",
@@ -140,7 +215,6 @@ def build_feature_row(
         if feature in row.index and feature in user:
             row[feature] = user[feature]
 
-    # Set one-hot encoded features
     selected_flat_col = "flat_type_" + _norm_flat_label(user["flat_type"]).replace(
         " ", "_"
     )
@@ -154,103 +228,374 @@ def build_feature_row(
     return pd.DataFrame([row])
 
 
-# ----------------------------------------------------------------------------------
-# 🏡 HDB Analytics Dashboard Function
-# ----------------------------------------------------------------------------------
+# ============================================================
+# SARIMAX Forecast Helpers
+# ============================================================
 
 
-def show():
-    """Renders the main Streamlit dashboard page."""
+def _make_forecast_index_like_model(model, steps: int):
+    try:
+        row_labels = getattr(model.model.data, "row_labels", None)
+    except Exception:
+        row_labels = None
 
-    # --- Title and Caption ---
-    st.title("🏡 HDB Analytics")
-    st.caption(
-        "Use predictive models and historical data to estimate property prices based on location and attributes."
+    if row_labels is None:
+        nobs = getattr(model.model, "nobs", None) or getattr(model, "nobs", None) or 0
+        return pd.RangeIndex(start=int(nobs), stop=int(nobs) + steps)
+
+    if isinstance(row_labels, pd.DatetimeIndex):
+        last = row_labels[-1]
+        freq = row_labels.freq or "MS"
+        start = last + pd.tseries.frequencies.to_offset(freq)
+        return pd.date_range(start=start, periods=steps, freq=freq)
+
+    if isinstance(row_labels, pd.PeriodIndex):
+        return pd.period_range(
+            start=row_labels[-1] + 1, periods=steps, freq=row_labels.freq
+        )
+
+    try:
+        nobs = len(row_labels)
+        return pd.RangeIndex(start=nobs, stop=nobs + steps)
+    except Exception:
+        nobs = getattr(model.model, "nobs", None) or 0
+        return pd.RangeIndex(start=int(nobs), stop=int(nobs) + steps)
+
+
+def prepare_and_run_forecast(
+    sarimax_model, df: pd.DataFrame, user_payload: dict, forecast_months: int = 12
+):
+    if sarimax_model is None:
+        return None
+
+    df_work = df.copy()
+    if "month" not in df_work.columns:
+        raise ValueError("'month' column not found in dataset")
+    if not pd.api.types.is_datetime64_any_dtype(df_work["month"]):
+        df_work["month"] = pd.to_datetime(df_work["month"], errors="coerce")
+
+    valid_months = df_work["month"].dropna()
+    if valid_months.empty:
+        raise ValueError("No valid month data in dataset")
+
+    start_date_forecast = valid_months.max() + pd.DateOffset(months=1)
+    display_future_dates = pd.date_range(
+        start=start_date_forecast, periods=forecast_months, freq="MS"
     )
 
-    # --- Custom CSS Styling (Enhanced for cleaner look) ---
+    selected_town = user_payload.get("town")
+    norm_flat_type = _norm_flat_label(user_payload.get("flat_type"))
+
+    town_mask = df_work["town"] == selected_town
+    if town_mask.any() and "district_number" in df_work.columns:
+        district_series = df_work.loc[town_mask, "district_number"].dropna()
+        district_num = (
+            float(district_series.mode().iloc[0]) if not district_series.empty else 0.0
+        )
+    else:
+        district_num = 0.0
+
+    if hasattr(sarimax_model, "model") and hasattr(sarimax_model.model, "exog_names"):
+        exog_features = sarimax_model.model.exog_names
+    elif hasattr(sarimax_model, "exog_names"):
+        exog_features = sarimax_model.exog_names
+    elif hasattr(sarimax_model, "model") and hasattr(sarimax_model.model, "exog"):
+        if sarimax_model.model.exog is not None and hasattr(
+            sarimax_model.model.exog, "columns"
+        ):
+            exog_features = sarimax_model.model.exog.columns.tolist()
+        else:
+            raise ValueError("Cannot determine exogenous variable names from model")
+    else:
+        raise ValueError("Cannot determine exogenous variable names from model")
+
+    compat_index = _make_forecast_index_like_model(sarimax_model, forecast_months)
+    exog_forecast_df = pd.DataFrame(0.0, index=compat_index, columns=exog_features)
+
+    if "district_number" in exog_features:
+        exog_forecast_df["district_number"] = district_num
+
+    ft_variations = [
+        "flat_type_" + norm_flat_type.replace(" ", "_"),
+        "flat_type_" + norm_flat_type,
+        "flat_type_" + norm_flat_type.replace("_", " "),
+    ]
+    matching_col = None
+    for ft_col in ft_variations:
+        if ft_col in exog_features:
+            matching_col = ft_col
+            break
+    if matching_col is None:
+        available_ft_cols = [f for f in exog_features if "flat_type" in f.lower()]
+        if available_ft_cols:
+            norm_ft_clean = (
+                norm_flat_type.upper()
+                .replace(" ", "")
+                .replace("_", "")
+                .replace("-", "")
+            )
+            for col in available_ft_cols:
+                col_ft_part = (
+                    col.replace("flat_type_", "")
+                    .upper()
+                    .replace(" ", "")
+                    .replace("_", "")
+                    .replace("-", "")
+                )
+                if norm_ft_clean == col_ft_part:
+                    matching_col = col
+                    break
+
+    if matching_col:
+        exog_forecast_df[matching_col] = 1.0
+    else:
+        available_ft_cols = [f for f in exog_features if "flat_type" in f.lower()]
+        raise ValueError(
+            f"Could not match flat type '{norm_flat_type}' to any exog feature. "
+            f"Tried: {ft_variations}. Available: {available_ft_cols}"
+        )
+
+    if exog_forecast_df.isna().any().any():
+        bad = exog_forecast_df.columns[exog_forecast_df.isna().any()].tolist()
+        raise ValueError(f"Exogenous forecast DataFrame contains NaN values in {bad}")
+
+    try:
+        forecast_results = sarimax_model.get_forecast(
+            steps=forecast_months, exog=exog_forecast_df.values
+        )
+    except Exception:
+        forecast_results = sarimax_model.get_forecast(
+            steps=forecast_months, exog=exog_forecast_df
+        )
+
+    if forecast_results is None:
+        raise ValueError("Forecast returned None")
+
+    forecast_df = forecast_results.summary_frame(alpha=0.05)
+    if forecast_df is None or forecast_df.empty:
+        raise ValueError("Forecast summary_frame is empty.")
+
+    if "mean" not in forecast_df.columns:
+        for alt_col in ["predicted_mean", "forecast", "yhat"]:
+            if alt_col in forecast_df.columns:
+                forecast_df = forecast_df.rename(columns={alt_col: "mean"})
+                break
+    if "mean" not in forecast_df.columns:
+        raise ValueError(f"Forecast missing 'mean' column: {list(forecast_df.columns)}")
+
+    if "mean_ci_lower" not in forecast_df.columns:
+        if "lower" in forecast_df.columns:
+            forecast_df = forecast_df.rename(columns={"lower": "mean_ci_lower"})
+        else:
+            raise ValueError("Forecast missing 'mean_ci_lower'.")
+
+    if "mean_ci_upper" not in forecast_df.columns:
+        if "upper" in forecast_df.columns:
+            forecast_df = forecast_df.rename(columns={"upper": "mean_ci_upper"})
+        else:
+            raise ValueError("Forecast missing 'mean_ci_upper'.")
+
+    forecast_df["month"] = display_future_dates
+
+    # Level calibration to last observed median ppsqm
+    tmp = df_work.copy()
+    tmp.loc[tmp["floor_area_sqm"] == 0, "floor_area_sqm"] = np.nan
+    tmp["ppsqm"] = tmp["resale_price"] / tmp["floor_area_sqm"]
+    last_month = pd.to_datetime(tmp["month"], errors="coerce").max()
+    last_hist_ppsqm = float(tmp.loc[tmp["month"] == last_month, "ppsqm"].median())
+
+    try:
+        one_step = sarimax_model.get_forecast(
+            steps=1, exog=exog_forecast_df.values[:1]
+        ).summary_frame(alpha=0.05)
+        model_next_ppsqm = float(one_step["mean"].iloc[0])
+    except Exception:
+        one_step = sarimax_model.get_forecast(
+            steps=1, exog=exog_forecast_df.iloc[:1]
+        ).summary_frame(alpha=0.05)
+        model_next_ppsqm = float(one_step["mean"].iloc[0])
+
+    cal = last_hist_ppsqm / model_next_ppsqm if model_next_ppsqm > 0 else 1.0
+    if np.isfinite(cal) and cal > 0:
+        forecast_df["mean"] *= cal
+        forecast_df["mean_ci_lower"] *= cal
+        forecast_df["mean_ci_upper"] *= cal
+
+    area = float(user_payload.get("floor_area_sqm", 80.0))
+    forecast_df["predicted_mean"] = forecast_df["mean"] * area
+    forecast_df["mean_ci_lower"] = forecast_df["mean_ci_lower"] * area
+    forecast_df["mean_ci_upper"] = forecast_df["mean_ci_upper"] * area
+
+    numeric_cols = ["predicted_mean", "mean_ci_lower", "mean_ci_upper"]
+    forecast_df[numeric_cols] = forecast_df[numeric_cols].clip(lower=0)
+
+    forecast_df = forecast_df[["month"] + numeric_cols]
+    if forecast_df.empty:
+        raise ValueError("Final forecast DataFrame is empty after processing")
+
+    return forecast_df
+
+
+# ============================================================
+# UI: Page
+# ============================================================
+
+
+def _inject_css():
     st.markdown(
-        """ 
-        <style> 
-        /* General KPI styling for the clean look */
-        :root { --card-bg: #ffffff; --muted: #6b7280; --border: #e5e7eb; --brand: #5B84B1FF; } 
-        .kpi { border: 1px solid var(--border); border-radius: 12px; padding: 16px; background: var(--card-bg); text-align: center; height: 100%; box-shadow: 0 1px 3px rgba(0,0,0,0.05); } 
-        .kpi .label { font-size: 12px; color: var(--muted); margin-bottom: 4px; } 
-        .kpi .value { font-size: 24px; font-weight: 700; color: #1f2937; } 
-        
-        /* Streamlit general tweaks */
-        section.main { padding-top: 1rem; }
-        .stContainer { margin-top: 1rem; }
-        
-        /* Custom horizontal rule for section separation */
-        .st-emotion-cache-1pxe4x4 { /* Targets the default st.markdown("---") */
-            margin-top: 1.5rem; 
-            margin-bottom: 1.5rem; 
-            border-top: 2px solid #ddd;
-        }
+        """
+    <style>
+    /* ===============================
+       Global: fonts & color tokens
+       =============================== */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded');
 
-        /* Hide the default text */ 
-        [data-testid="stIconMaterial"] { 
-        position: relative; display: inline-flex !important; align-items: center; justify-content: center; color: transparent !important; font-size: 0 !important; width: 24px; overflow: visible !important; } 
-        
-        /* Base: left arrow when open */ 
-        [data-testid="stIconMaterial"]::before { content: "❮"; color: #6b7280 !important; font-family: system-ui, sans-serif; font-size: 20px !important; font-weight: 700; transition: transform 0.2s ease; } 
-        [data-testid="stIconMaterial"][title="keyboard_double_arrow_right"]::before, [data-testid="stIconMaterial"][aria-label="keyboard_double_arrow_right"]::before, [data-testid="stIconMaterial"]:where([data-testid="stIconMaterial"]:not([title])):after { content: "❯"; }
+    :root{
+      --brand:#4F46E5;        /* indigo-600 */
+      --brand-soft:#A5B4FC;   /* indigo-300 */
+      --ink:#0F172A;          /* slate-900 */
+      --muted:#6B7280;        /* gray-500 */
+      --card:#FFFFFF;         /* white */
+      --border:#E5E7EB;       /* gray-200 */
+      --accent:#06B6D4;       /* cyan-500 */
+      --accent-soft:#CFFAFE;  /* cyan-100 */
+    }
 
-        </style> 
-        """,
+    /* ===============================
+       Backgrounds → pure white
+       =============================== */
+    html, body,
+    [data-testid="stAppViewContainer"]{
+      background:#FFFFFF !important;
+    }
+
+    /* Use the Material Symbols ligature font for Streamlit's icon nodes */
+    [data-testid="stSidebar"] [data-testid="stIconMaterial"],
+    header [data-testid="stIconMaterial"]{
+    font-family: 'Material Symbols Rounded' !important;
+    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    font-size: 22px !important;
+    color: #6B7280 !important;
+    line-height: 1;
+    }
+
+    /* Optional: cursor + hover for the collapse button area */
+    [data-testid="stSidebarCollapseControl"],
+    [data-testid="stSidebarNavCollapse"],
+    [data-testid="stSidebarNavSeparator"]{
+    cursor: pointer !important;
+    }
+
+ 
+
+    /* ===============================
+       Typography
+       =============================== */
+    html, body, *{
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif !important;
+    }
+    .main-title{
+      font-weight:800; letter-spacing:-0.02em; 
+      background:linear-gradient(90deg, var(--brand), var(--accent));
+      -webkit-background-clip:text; 
+    }
+    .subcap{ color:var(--muted); margin-top:-6px; }
+
+    /* ===============================
+       Cards / KPIs
+       =============================== */
+    .kpi{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:14px;
+      padding:14px;
+      text-align:center;
+      box-shadow:0 1px 2px rgba(2,6,23,0.03);
+      min-height:94px;              /* keep KPI tiles visually equal */
+      display:flex; flex-direction:column; justify-content:center;
+    }
+    .kpi .label{ font-size:12px; color:var(--muted); margin-bottom:2px; }
+    .kpi .value{ font-weight:800; font-size:22px; color:var(--ink); }
+    .kpi .hint { font-size:11px; color:var(--muted); margin-top:6px; }
+
+    /* Soft badge (used for horizon) */
+    .soft-badge{
+      display:inline-block; padding:2px 8px; border-radius:999px;
+      background:var(--accent-soft); color:var(--accent); font-size:11px;
+      border:1px solid #A5F3FC;
+    }
+
+    /* Dividers, notes, footnotes */
+    .divider{ height:1px; background:var(--border); margin:16px 0 8px 0; }
+    .sidebar-note{
+      font-size:12px; color:var(--muted); border-left:3px solid var(--brand);
+      padding-left:8px; margin-top:8px;
+    }
+    .footnote{ color:var(--muted); font-size:12px; margin-top:6px; }
+
+    /* Optional: neutralize default card strokes in main area */
+    .st-emotion-cache-ocqkz7, .st-emotion-cache-1r6slb0{ border-color:var(--border) !important; }
+    </style>
+    """,
         unsafe_allow_html=True,
     )
 
-    # Load Data and Model
+
+def show():
+    _inject_css()
+
+    st.markdown("<h1 class='main-title'>HDB Analytics</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='subcap'>Estimate prices, explore market trends, and preview the next few months with SARIMAX.</div>",
+        unsafe_allow_html=True,
+    )
+    st.write("")
+
+    # Data + models
     df, flat_cols, flat_types = load_data()
-    model = load_model("models/best_rf_pipeline.pkl")
+    rf_model = load_model("models/best_rf_pipeline.pkl")
+    model = rf_model
     model_loaded = model is not None
+    sarimax_model = load_sarimax_model("models/sarimax_flattype_district.pkl")
 
-    # ====================================================================
-    # 📝 SIDEBAR FILTERS
-    # ====================================================================
+    # ---------------- Sidebar ----------------
     with st.sidebar:
-        st.header("Property Features ")
-
-        # Core property features
+        st.markdown("### Filters")
         town = st.selectbox("Town", sorted(df["town"].dropna().unique().tolist()))
         flat_type = st.selectbox("Flat Type", flat_types, index=0)
+
         a_min = float(max(20.0, df["floor_area_sqm"].quantile(0.02)))
         a_max = float(min(200.0, df["floor_area_sqm"].quantile(0.98)))
         area = st.slider("Size (sqm)", a_min, a_max, float(np.clip(80.0, a_min, a_max)))
         lease = st.slider("Remaining Lease (years)", 0, 99, 60)
 
-        # Model Proximity Features (for price prediction)
-        model_mrt_km = st.slider(
-            "Nearest MRT Distance (km)", 0.0, 5.0, 1.0, 0.1, key="model_mrt"
+        forecast_horizon = st.slider(
+            "Forecast Horizon (months)",
+            3,
+            36,
+            12,
+            1,
+            help="Number of months to forecast using the SARIMAX model.",
         )
+
+        st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+        st.markdown("#### Proximity (Predicted Price)")
+        model_mrt_km = st.slider("Nearest MRT Distance (km)", 0.0, 5.0, 1.0, 0.1)
         model_schools_km = st.slider(
-            "Nearest Schools Distance (km)", 0.0, 5.0, 1.5, 0.1, key="model_schools"
+            "Nearest Schools Distance (km)", 0.0, 5.0, 1.5, 0.1
         )
         model_childcare_km = st.slider(
-            "Nearest Childcare Distance (km)", 0.0, 5.0, 1.5, 0.1, key="model_childcare"
+            "Nearest Childcare Distance (km)", 0.0, 5.0, 1.5, 0.1
         )
         model_supermarkets_km = st.slider(
-            "Nearest Supermarkets Distance (km)",
-            0.0,
-            5.0,
-            1.0,
-            0.1,
-            key="model_supermarkets",
+            "Nearest Supermarkets Distance (km)", 0.0, 5.0, 1.0, 0.1
         )
         model_hawker_km = st.slider(
-            "Nearest Hawker Centres Distance (km)",
-            0.0,
-            5.0,
-            1.0,
-            0.1,
-            key="model_hawker",
+            "Nearest Hawker Centres Distance (km)", 0.0, 5.0, 1.0, 0.1
         )
 
-        st.markdown("---")
-
-    # --- Prepare Prediction Payload ---
+    # Build prediction payload
     user_payload = {
         "town": town,
         "flat_type": flat_type,
@@ -264,7 +609,7 @@ def show():
     }
     X_user = build_feature_row(user_payload, flat_cols, df.columns)
 
-    # --- Compute model-based prediction ---
+    # Predict
     model_price = None
     if model_loaded:
         try:
@@ -273,365 +618,441 @@ def show():
             model_price = price_per_sqm * user_payload["floor_area_sqm"]
         except Exception as e:
             st.warning(f"Prediction error: {e}")
-            model_price = None
 
-    # ====================================================================
-    st.header("🧠 Model-Based Insights")
-    # ====================================================================
-    with st.container(border=True):
-        # Row 1: KPI header row
-        c1, c2, c3, c4 = st.columns([1.2, 1, 1, 1])
-        with c1:
-            st.markdown(
-                "<div class='kpi'><div class='label'>Predicted Price</div>"
-                + (
-                    f"<div class='value' style='color:#1f2937'>SGD {model_price:,.0f}</div>"
-                    if model_price is not None
-                    else "<div class='value' style='color:#9CA3AF'>N/A</div>"
+    # Shared datasets
+    norm_ft = _norm_flat_label(flat_type)
+    ft_col = "flat_type_" + norm_ft.replace(" ", "_")
+    comp_df = df.copy()
+    comp_df = comp_df[comp_df["town"] == town]
+    if ft_col in comp_df.columns:
+        comp_df = comp_df[comp_df[ft_col]]
+    comp_df = comp_df[comp_df["floor_area_sqm"].between(area * 0.85, area * 1.15)]
+    comp_df = comp_df[
+        comp_df["remaining_lease"].between(max(0, lease - 10), min(99, lease + 10))
+    ]
+    price_dist_df = df[df["town"] == town].copy()
+
+    trend = None
+    trend_monthly = None
+    forecast_df = None
+    forecast_error = None
+
+    if ft_col in df.columns:
+        broader = df[(df["town"] == town)]
+        if ft_col in broader.columns:
+            broader = broader[broader[ft_col]]
+
+        required_cols = {"resale_price", "floor_area_sqm", "month"}
+        if required_cols.issubset(broader.columns):
+            broader_month_clean = broader.copy()
+            if not pd.api.types.is_datetime64_any_dtype(broader_month_clean["month"]):
+                broader_month_clean["month"] = pd.to_datetime(
+                    broader_month_clean["month"], errors="coerce"
                 )
-                + "</div>",
-                unsafe_allow_html=True,
-            )
-        with c2:
-            st.markdown(
-                f"<div class='kpi'><div class='label'>Flat Type</div><div class='value'>{flat_type}</div></div>",
-                unsafe_allow_html=True,
-            )
-        with c3:
-            st.markdown(
-                f"<div class='kpi'><div class='label'>Area</div><div class='value'>{area:.0f} sqm</div></div>",
-                unsafe_allow_html=True,
-            )
-        with c4:
-            st.markdown(
-                f"<div class='kpi'><div class='label'>Lease</div><div class='value'>{lease} yrs</div></div>",
-                unsafe_allow_html=True,
+            broader_month_clean = broader_month_clean[
+                broader_month_clean["month"].notna()
+            ]
+
+            ppsqm_df = broader_month_clean.copy()
+            ppsqm_df.loc[ppsqm_df["floor_area_sqm"] == 0, "floor_area_sqm"] = np.nan
+            ppsqm_df["price_per_sqm_obs"] = (
+                ppsqm_df["resale_price"] / ppsqm_df["floor_area_sqm"]
             )
 
-        st.markdown(
-            "<hr style='border:1px solid #e5e7eb; margin: 1.5rem 0 1rem 0;'>",
-            unsafe_allow_html=True,
+            hist_ppsqm = (
+                ppsqm_df.dropna(subset=["price_per_sqm_obs"])
+                .groupby("month", as_index=False)["price_per_sqm_obs"]
+                .median()
+                .rename(columns={"price_per_sqm_obs": "price_per_sqm"})
+                .sort_values("month")
+            )
+            hist_ppsqm["month"] = pd.to_datetime(
+                hist_ppsqm["month"], errors="coerce"
+            ).dt.normalize()
+
+            user_area = float(user_payload.get("floor_area_sqm", 80.0))
+            trend_monthly = hist_ppsqm.copy()
+            trend_monthly["price"] = trend_monthly["price_per_sqm"] * user_area
+            trend_monthly["type"] = "Historical (area-adjusted)"
+
+            if sarimax_model is not None:
+                try:
+                    forecast_df = prepare_and_run_forecast(
+                        sarimax_model,
+                        broader_month_clean,
+                        user_payload,
+                        forecast_months=forecast_horizon,
+                    )
+                    if forecast_df is not None and forecast_df.empty:
+                        forecast_error = "Forecast returned empty results"
+                        forecast_df = None
+                except Exception as e:
+                    forecast_error = str(e)
+                    forecast_df = None
+
+            trend_data = (
+                trend_monthly[["month", "price"]]
+                .rename(columns={"price": "resale_price"})
+                .copy()
+            )
+            trend_data["year"] = trend_data["month"].dt.year
+            trend = (
+                trend_data.groupby("year", as_index=False)["resale_price"]
+                .median()
+                .sort_values("year")
+            )
+
+    # ---------------- Header KPIs (equal width) ----------------
+    c1, c2, c3, c4 = st.columns([1, 1, 1, 1])  # equal widths
+    with c1:
+        _kpi(
+            fmt_money(model_price) if model_price is not None else "—",
+            "Predicted Price",
+            help_text=f"{town} · {flat_type}",
         )
+    with c2:
+        _kpi(f"{area:.0f} sqm", "Size", help_text="Floor area", color=PALETTE["accent"])
+    with c3:
+        _kpi(f"{lease} yrs", "Remaining Lease", help_text="User-selected")
+    with c4:
+        horizon_badge = f"<span class='soft-badge'>{forecast_horizon} months</span>"
+        _kpi(horizon_badge, "Forecast Horizon", help_text="SARIMAX window")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-        # Row 2 (Full Width): Feature Importance Chart
-        st.subheader("Feature Importance")
+    st.write("")
 
-        feature_importances = None
-        names = X_user.columns
+    # ---------------- Tabs: Forecast · Market · Comparables ----------------
+    tab1, tab2, tab3 = st.tabs(["📈 Forecast", "🧭 Market", "📋 Comparables"])
 
-        if model_loaded:
-            try:
-                # Retrieve final estimator from pipeline
-                if hasattr(model, "named_steps"):
-                    final_estimator = list(model.named_steps.values())[-1]
+    # Forecast Tab
+    with tab1:
+        st.markdown("#### Median Price Forecast")
+        st.caption("Area-adjusted history + SARIMAX forecast with 95% confidence band.")
+
+        if (
+            trend_monthly is not None
+            and not trend_monthly.empty
+            and forecast_df is not None
+            and not forecast_df.empty
+        ):
+            last_hist_date = trend_monthly["month"].max()
+            start_date_hist_limit = last_hist_date - pd.DateOffset(months=24)
+            filtered_hist_df = trend_monthly[
+                trend_monthly["month"] >= start_date_hist_limit
+            ].copy()
+
+            forecast_plot_df = forecast_df.copy().rename(
+                columns={"predicted_mean": "price"}
+            )
+            forecast_plot_df["type"] = "SARIMAX Forecast"
+            forecast_plot_df["ci_lower"] = forecast_plot_df["mean_ci_lower"]
+            forecast_plot_df["ci_upper"] = forecast_plot_df["mean_ci_upper"]
+
+            all_vals = pd.concat(
+                [filtered_hist_df[["price"]], forecast_plot_df[["price"]]],
+                ignore_index=True,
+            )["price"].dropna()
+            if not all_vals.empty:
+                y_min = float(all_vals.min())
+                y_max = float(all_vals.max())
+                pad = 0.06 * (y_max - y_min if y_max > y_min else max(1.0, y_max))
+                y_domain = [max(0, y_min - pad), y_max + pad]
+            else:
+                y_domain = [0, 1]
+
+            ci_band = (
+                alt.Chart(forecast_plot_df)
+                .mark_area(opacity=0.18, color=PALETTE["brand"])
+                .encode(
+                    x=alt.X("month:T", title=None),
+                    y="mean_ci_lower:Q",
+                    y2="mean_ci_upper:Q",
+                )
+            )
+
+            gap_row = pd.DataFrame(
+                {
+                    "month": [last_hist_date + pd.DateOffset(days=1)],
+                    "price": [None],
+                    "type": ["Gap"],
+                }
+            )
+            combined_df = pd.concat(
+                [
+                    filtered_hist_df[["month", "price"]].assign(type="Historical"),
+                    gap_row[["month", "price", "type"]],
+                    forecast_plot_df[
+                        ["month", "price", "type", "ci_lower", "ci_upper"]
+                    ],
+                ],
+                ignore_index=True,
+            )
+
+            for d in (combined_df, forecast_plot_df):
+                d["month"] = pd.to_datetime(d["month"], errors="coerce")
+                d["price"] = pd.to_numeric(d["price"], errors="coerce")
+
+            hover = alt.selection_single(
+                fields=["month"],
+                nearest=True,
+                on="mouseover",
+                empty="none",
+                clear="mouseout",
+            )
+
+            line = (
+                alt.Chart(combined_df)
+                .mark_line(strokeWidth=2)
+                .encode(
+                    x=alt.X(
+                        "month:T",
+                        title="Month",
+                        scale=alt.Scale(
+                            domain=[start_date_hist_limit, forecast_df["month"].max()]
+                        ),
+                        axis=alt.Axis(format="%b %Y", labelAngle=0, labelOverlap=True),
+                    ),
+                    y=alt.Y(
+                        "price:Q",
+                        title="Median Resale Price (SGD)",
+                        scale=alt.Scale(domain=y_domain, zero=False),
+                        axis=alt.Axis(format=",.0f", tickCount=6, grid=True),
+                    ),
+                    color=alt.condition(
+                        alt.datum.type == "SARIMAX Forecast",
+                        alt.value(PALETTE["brand"]),
+                        alt.value("#111827"),
+                    ),
+                    detail="type:N",
+                )
+            )
+
+            points = (
+                line.mark_point(size=35, filled=True)
+                .transform_filter(hover)
+                .encode(color=alt.value("#111827"))
+            )
+            rule = (
+                alt.Chart(combined_df)
+                .mark_rule(strokeDash=[4, 4])
+                .encode(x="month:T")
+                .transform_filter(hover)
+            )
+            tooltip = (
+                alt.Chart(combined_df)
+                .mark_rule(opacity=0)
+                .encode(
+                    x="month:T",
+                    y="price:Q",
+                    tooltip=[
+                        alt.Tooltip("month:T", title="Date", format="%b %Y"),
+                        alt.Tooltip("price:Q", title="Median Price", format=",.0f"),
+                        alt.Tooltip(
+                            "ci_lower:Q", title="95% CI (lower)", format=",.0f"
+                        ),
+                        alt.Tooltip(
+                            "ci_upper:Q", title="95% CI (upper)", format=",.0f"
+                        ),
+                        alt.Tooltip("type:N", title="Series"),
+                    ],
+                )
+                .add_selection(hover)
+            )
+
+            final_chart = (
+                (ci_band + line + points + rule + tooltip)
+                .properties(
+                    title=alt.TitleParams(
+                        f"{forecast_horizon}-Month Median Price Forecast · {town} · {flat_type}",
+                        anchor="start",
+                        fontSize=15,
+                        color=PALETTE["ink"],
+                    ),
+                    padding={"left": 60, "right": 16, "top": 10, "bottom": 30},
+                    height=360,
+                )
+                .interactive(bind_y=False)
+            )
+
+            render_altair(final_chart)
+
+            latest_forecast = forecast_df["predicted_mean"].iloc[-1]
+            last_hist_total = trend_monthly["price"].iloc[-1]
+            pct_change = (
+                ((latest_forecast - last_hist_total) / last_hist_total * 100)
+                if last_hist_total
+                else np.nan
+            )
+            st.success(
+                f"Projected **{forecast_horizon}-month median price**: **{fmt_money(latest_forecast)}** "
+                f"({pct_change:+.1f}% vs last observed)."
+            )
+
+            col_dl1, col_dl2 = st.columns([1, 1])
+            with col_dl1:
+                st.download_button(
+                    "⬇️ Download Forecast CSV",
+                    data=forecast_df.to_csv(index=False).encode("utf-8"),
+                    file_name=f"forecast_{town}_{flat_type.replace(' ', '_').lower()}_{forecast_horizon}m.csv",
+                    mime="text/csv",
+                )
+            with col_dl2:
+                hist_slice = filtered_hist_df[["month", "price"]].rename(
+                    columns={"price": "historical_price"}
+                )
+                st.download_button(
+                    "⬇️ Download Last 24M History CSV",
+                    data=hist_slice.to_csv(index=False).encode("utf-8"),
+                    file_name=f"history_{town}_{flat_type.replace(' ', '_').lower()}_24m.csv",
+                    mime="text/csv",
+                )
+
+        else:
+            if sarimax_model is None:
+                st.warning(
+                    "ARIMAX model not loaded. Ensure `models/sarimax_flattype_district.pkl` exists."
+                )
+            elif trend_monthly is None or trend_monthly.empty:
+                st.info(
+                    "Insufficient historical data for the selected flat type and town."
+                )
+            elif forecast_df is None or forecast_df.empty:
+                if forecast_error:
+                    st.error(
+                        "Forecast failed:\n\n"
+                        f"- {forecast_error}\n\n"
+                        "Check exogenous features and town/flat compatibility."
+                    )
                 else:
-                    final_estimator = model.steps[-1][1]
+                    st.warning("Forecast unavailable for this combination.")
+            else:
+                st.info("No forecast available.")
 
-                if hasattr(final_estimator, "feature_importances_"):
-                    feature_importances = final_estimator.feature_importances_
+    # Market Tab
+    with tab2:
+        st.markdown("#### Town-wide Distribution")
+        st.caption("All resale transactions in this town, regardless of size or type.")
 
-                names = getattr(model, "feature_names_in_", X_user.columns)
-
-            except Exception as e:
-                st.info(f"Could not extract model features. Error: {e}")
-
-        if feature_importances is not None:
-            imp_series = pd.Series(feature_importances, index=names)
-            imp_series = imp_series[~imp_series.index.duplicated(keep="first")]
-            imp_df = imp_series.sort_values(ascending=False).head(10).reset_index()
-            imp_df.columns = ["Feature", "Importance"]
-
-            # Altair Horizontal Bar Chart for maximum readability
-            chart = (
-                alt.Chart(imp_df)
+        if not price_dist_df.empty and "resale_price" in price_dist_df.columns:
+            hist = (
+                alt.Chart(price_dist_df)
                 .mark_bar()
                 .encode(
-                    y=alt.Y("Feature:N", sort="-x", title="Feature Name"),
-                    x=alt.X("Importance:Q", title="Relative Importance"),
-                    color=alt.value("#5B84B1FF"),  # Solid brand color
-                    tooltip=["Feature", "Importance"],
+                    x=alt.X(
+                        "resale_price:Q",
+                        bin=alt.Bin(maxbins=35),
+                        title="Resale Price (SGD)",
+                    ),
+                    y=alt.Y("count():Q", title="Transactions"),
+                    tooltip=[alt.Tooltip("count():Q", title="Transactions")],
                 )
-                .properties(title="Top 10 Feature Importances", height=350)
+                .properties(height=420)
             )
-            render_altair(chart)
-        else:
-            st.info("Model feature importances unavailable. Check model configuration.")
-
-        st.markdown(
-            "<hr style='border:1px solid #e5e7eb; margin: 1rem 0 1.5rem 0;'>",
-            unsafe_allow_html=True,
-        )
-
-        # Row 3 (Full Width Placeholder): Time-Series Forecast
-        st.subheader("Time-Series Forecast (Future Feature)")
-        st.caption(
-            "This section is currently disabled. Only historical trends are shown."
-        )
-
-    # ====================================================================
-    st.header("📊 Historical Market Insights")
-    # ====================================================================
-    with st.container(border=True):
-        # --- PREPARE DATASETS ---
-        # 1. Tightly Filtered Comparables (used only for the bottom table)
-        norm_ft = _norm_flat_label(flat_type)
-        ft_col = "flat_type_" + norm_ft.replace(" ", "_")
-        comp_df = df.copy()
-
-        # Apply core filters (Town, Type, Size, Lease)
-        comp_df = comp_df[comp_df["town"] == town]
-        if ft_col in comp_df.columns:
-            comp_df = comp_df[comp_df[ft_col]]
-        comp_df = comp_df[comp_df["floor_area_sqm"].between(area * 0.85, area * 1.15)]
-        comp_df = comp_df[
-            comp_df["remaining_lease"].between(max(0, lease - 10), min(99, lease + 10))
-        ]
-
-        # 2. Town-Wide Price Distribution Data (Used for Histogram and Map)
-        price_dist_df = df[df["town"] == town].copy()
-
-        # 3. Trend Data (Tightly filtered by Town and Flat Type for historical median trend)
-        trend = None
-        if ft_col in df.columns:
-            # Note: We use the 'broader' scope defined previously which filters by town and flat type
-            broader = df[(df["town"] == town)]
-            if ft_col in broader.columns:
-                broader = broader[broader[ft_col]]
-            if "resale_price" in broader.columns and "year" in broader.columns:
-                trend = (
-                    broader.groupby("year", as_index=False)["resale_price"]
-                    .median()
-                    .sort_values("year")
-                )
-
-        # Row 1: Town-Wide Price distribution + map (USES price_dist_df)
-        col1_hist, col2_hist = st.columns([2, 1])
-        with col1_hist:
-            st.subheader(f"{town} Resale Price Distribution")
+            render_altair(hist)
             st.caption(
-                "Shows all resale transactions in the town, regardless of size or type."
+                f"Showing **{len(price_dist_df):,}** transactions in **{town}**."
             )
-            if not price_dist_df.empty and "resale_price" in price_dist_df.columns:
-                hist = (
-                    alt.Chart(
-                        price_dist_df
-                    )  # *** SOURCE CHANGE: Using town-wide data ***
-                    .mark_bar()
-                    .encode(
-                        x=alt.X(
-                            "resale_price:Q",
-                            bin=alt.Bin(maxbins=30),
-                            title="Resale Price (SGD)",
-                        ),
-                        y=alt.Y("count():Q", title="Count"),
-                        tooltip=["resale_price:Q", "count():Q"],
-                    )
-                    .properties(height=550)  # Taller height for visibility
-                )
-                render_altair(hist)
-                st.caption(
-                    f"Showing {len(price_dist_df):,} total transactions in {town}."
-                )
-            else:
-                st.info(f"No price data available for {town}.")
+        else:
+            st.info("No price data available for this town.")
 
-        with col2_hist:
-            # --- Map Controls & Title ---
-            map_header_col, map_toggle_col = st.columns([2, 1])
-            with map_header_col:
-                st.subheader(f"{town} Map")
-
-            with map_toggle_col:
-                # 1. Toggle for Map View
-                use_comp_data = st.toggle(
-                    "Show Comparables Only",
-                    value=False,
-                    help="Switch between all town transactions (default) and the tightly filtered comparable sales.",
-                )
-
-            try:
-                # 2. Conditional Data Source Selection
-                if use_comp_data:
-                    current_map_df_source = comp_df
-                    map_view_label = "Comparable Sales"
-                else:
-                    current_map_df_source = price_dist_df
-                    map_view_label = "Town Transactions"
-
-                # Check if a town is selected (always true after the sidebar)
-                if town:
-                    st.caption(f"Displaying **{map_view_label}** on the map.")
-
-                    # Ensure data is available
-                    map_df = (
-                        current_map_df_source.dropna(subset=["latitude", "longitude"])
-                        .head(1000)
-                        .copy()
-                    )
-
-                    if not map_df.empty:
-                        # 3. Preprocessing for the tooltip
-                        map_df["resale_price_k"] = (
-                            map_df["resale_price"] / 1000
-                        ).round(0)
-                        map_df["price_per_sqm"] = map_df["price_per_sqm"].round(0)
-                        map_df["floor_area_sqm"] = map_df["floor_area_sqm"].round(0)
-
-                        map_df["month_str"] = pd.to_datetime(
-                            map_df["month"], errors="coerce"
-                        ).dt.strftime("%b %Y")
-                        map_df["lease_str"] = (
-                            map_df["remaining_lease"].round(0).astype(str) + " yrs"
-                        )
-
-                        # FIX: Round ALL distances to prevent long float strings in the tooltip
-                        map_df["nearest_mrt_distance_km"] = map_df[
-                            "nearest_mrt_distance_km"
-                        ].round(2)
-                        map_df["nearest_schools_distance_km"] = map_df[
-                            "nearest_schools_distance_km"
-                        ].round(2)
-                        # --- ADDED: Childcare, Supermarket, Hawker ---
-                        map_df["nearest_childcare_distance_km"] = map_df[
-                            "nearest_childcare_distance_km"
-                        ].round(2)
-                        map_df["nearest_supermarkets_distance_km"] = map_df[
-                            "nearest_supermarkets_distance_km"
-                        ].round(2)
-                        map_df["nearest_hawker_distance_km"] = map_df[
-                            "nearest_hawker_distance_km"
-                        ].round(2)
-
-                        # --- PyDeck Rendering ---
-                        layer = pdk.Layer(
-                            "ScatterplotLayer",
-                            data=map_df,
-                            get_position=["longitude", "latitude"],
-                            get_radius=80,
-                            get_fill_color=[170, 0, 0, 180],
-                            pickable=True,
-                        )
-                        view_state = pdk.ViewState(
-                            latitude=float(map_df["latitude"].mean()),
-                            longitude=float(map_df["longitude"].mean()),
-                            zoom=11.5,
-                        )
-
-                        # --- CRITICAL FIX: Simplify Tooltip HTML formatting ---
-                        map_tooltip = {
-                            "html": """
-                                <div style="font-size: 13px; padding: 6px; color: #222;">
-                                    <b>📅 Month:</b> {month_str} <br/>
-                                    <b>💰 Price:</b> ${resale_price_k}k <br/>
-                                    <b>📐 Price/sqm:</b> ${price_per_sqm} <br/>
-                                    <b>🏠 Flat:</b> {flat_type}, {floor_area_sqm} sqm <br/>
-                                    <b>⏳ Lease Left:</b> {lease_str} <br/>
-                                    <b>🚇 MRT Dist:</b> {nearest_mrt_distance_km} km <br/>
-                                    <b>🏫 School Dist:</b> {nearest_schools_distance_km} km <br/>
-                                    <b>👶 Childcare Dist:</b> {nearest_childcare_distance_km} km <br/>
-                                    <b>🛒 Supermarket Dist:</b> {nearest_supermarkets_distance_km} km <br/>
-                                    <b>🍜 Hawker Dist:</b> {nearest_hawker_distance_km} km
-                                </div>
-                            """,
-                            "style": {
-                                "backgroundColor": "rgba(255, 255, 255, 0.9)",
-                                "color": "black",
-                                "border-radius": "6px",
-                            },
-                        }
-
-                        st.pydeck_chart(
-                            pdk.Deck(
-                                map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-                                initial_view_state=view_state,
-                                layers=[layer],
-                                tooltip=map_tooltip,
-                            )
-                        )
-                    else:
-                        # 4. TARGETED ERROR MESSAGE
-                        if use_comp_data:
-                            st.info(
-                                "No **comparable** transactions found under current filters. Try relaxing the proximity or adjust the size filters in the sidebar, or toggle the map view off."
-                            )
-                        else:
-                            st.info(f"No geocoded data found for map view in {town}.")
-                else:
-                    st.info("Select a town to view the map.")
-            except Exception as e:
-                st.error(f"Map rendering error: {e}")
-
-        st.markdown(
-            "<hr style='border:1px solid #e5e7eb; margin: 1.5rem 0 1rem 0;'>",
-            unsafe_allow_html=True,
-        )
-
-        # Row 2: Historical trend + insights (USES trend)
-        col1_trend, col2_trend = st.columns([2, 1])
-        with col1_trend:
-            st.subheader(f"Historical Median Price Trend ({flat_type})")
-            if trend is not None and not trend.empty:
-                trend = trend.dropna(subset=["year"]).copy()
-                trend["year"] = trend["year"].astype(int)
-                trend["date"] = pd.to_datetime(trend["year"], format="%Y")
-
-                line_hist = (
-                    alt.Chart(trend)
-                    .mark_line(point=True, color="black")
-                    .encode(
-                        x=alt.X("date:T", title="Year", axis=alt.Axis(format="%Y")),
-                        y=alt.Y("resale_price:Q", title="Median Price (SGD)"),
-                        tooltip=[
-                            "year:O",
-                            alt.Tooltip("resale_price:Q", format=",.0f"),
-                        ],
-                    )
-                )
-
-                render_altair(line_hist)
-            else:
-                st.info("Insufficient data for trend analysis.")
-
-        with col2_trend:
-            st.subheader("Trend Insights")
-            if trend is not None and not trend.empty and len(trend) >= 3:
-                min_year = trend.loc[trend["resale_price"].idxmin(), "year"]
-                max_year = trend.loc[trend["resale_price"].idxmax(), "year"]
-                min_price = trend["resale_price"].min()
-                max_price = trend["resale_price"].max()
-                recent_trend = trend.tail(3)["resale_price"].pct_change().mean() * 100
-
-                st.markdown("**Historical Analysis:**")
-                st.markdown(f"- **Lowest point:** {min_year} (SGD {min_price:,.0f})")
-                st.markdown(f"- **Peak:** {max_year} (SGD {max_price:,.0f})")
-                if not pd.isna(recent_trend):
-                    trend_direction = (
-                        "rising"
-                        if recent_trend > 0
-                        else "falling"
-                        if recent_trend < 0
-                        else "stable"
-                    )
-                    st.markdown(
-                        f"- **Recent trend:** **{trend_direction}** ({recent_trend:+.1f}% annually)"
-                    )
-
-                st.markdown("- **Outlook:** Focused on historical data only.")
-            else:
-                st.info("Insufficient data for trend insights.")
-
-        st.markdown(
-            "<hr style='border:1px solid #e5e7eb; margin: 1.5rem 0 1rem 0;'>",
-            unsafe_allow_html=True,
-        )
-
-        # Row 3: Recent comparable sales table (USES comp_df)
-        st.subheader("Recent Closely Comparable Sales")
+        st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
+        st.markdown("#### Map")
         st.caption(
-            "Transactions matching the specific size, type, lease, and proximity filters."
+            "Switch to view either all town transactions or just close comparables."
         )
+        map_toggle = st.toggle("Show comparables only", value=False)
+
+        try:
+            current_map_df = comp_df if map_toggle else price_dist_df
+            map_view_label = "Comparable Sales" if map_toggle else "Town Transactions"
+
+            if town and not current_map_df.empty:
+                st.caption(f"Displaying **{map_view_label}** on the map.")
+
+                map_df = (
+                    current_map_df.dropna(subset=["latitude", "longitude"])
+                    .head(1000)
+                    .copy()
+                )
+                if not map_df.empty:
+                    map_df["resale_price_k"] = (map_df["resale_price"] / 1000).round(0)
+                    map_df["price_per_sqm"] = map_df["price_per_sqm"].round(0)
+                    map_df["floor_area_sqm"] = map_df["floor_area_sqm"].round(0)
+                    map_df["month_str"] = pd.to_datetime(
+                        map_df["month"], errors="coerce"
+                    ).dt.strftime("%b %Y")
+                    map_df["lease_str"] = (
+                        map_df["remaining_lease"].round(0).astype(str) + " yrs"
+                    )
+
+                    for col in [
+                        "nearest_mrt_distance_km",
+                        "nearest_schools_distance_km",
+                        "nearest_childcare_distance_km",
+                        "nearest_supermarkets_distance_km",
+                        "nearest_hawker_distance_km",
+                    ]:
+                        if col in map_df.columns:
+                            map_df[col] = map_df[col].round(2)
+
+                    layer = pdk.Layer(
+                        "ScatterplotLayer",
+                        data=map_df,
+                        get_position=["longitude", "latitude"],
+                        get_radius=80,
+                        get_fill_color=[79, 70, 229, 180],  # brand indigo
+                        pickable=True,
+                    )
+                    view_state = pdk.ViewState(
+                        latitude=float(map_df["latitude"].mean()),
+                        longitude=float(map_df["longitude"].mean()),
+                        zoom=11.5,
+                    )
+                    map_tooltip = {
+                        "html": """
+                            <div style="font-size: 13px; padding: 6px; color: #111;">
+                                <b>📅 Month:</b> {month_str} <br/>
+                                <b>💰 Price:</b> ${resale_price_k}k <br/>
+                                <b>📐 Price/sqm:</b> ${price_per_sqm} <br/>
+                                <b>🏠 Flat:</b> {flat_type}, {floor_area_sqm} sqm <br/>
+                                <b>⏳ Lease:</b> {lease_str} <br/>
+                                <b>🚇 MRT:</b> {nearest_mrt_distance_km} km <br/>
+                                <b>🏫 School:</b> {nearest_schools_distance_km} km <br/>
+                                <b>👶 Childcare:</b> {nearest_childcare_distance_km} km <br/>
+                                <b>🛒 Supermarket:</b> {nearest_supermarkets_distance_km} km <br/>
+                                <b>🍜 Hawker:</b> {nearest_hawker_distance_km} km
+                            </div>
+                        """,
+                        "style": {
+                            "backgroundColor": "rgba(255,255,255,0.95)",
+                            "color": "black",
+                            "border-radius": "6px",
+                        },
+                    }
+                    st.pydeck_chart(
+                        pdk.Deck(
+                            map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+                            initial_view_state=view_state,
+                            layers=[layer],
+                            tooltip=map_tooltip,
+                        )
+                    )
+                else:
+                    st.info("No geocoded points to plot under current filters.")
+            else:
+                st.info("Select a town and ensure there are transactions to display.")
+        except Exception as e:
+            st.error(f"Map rendering error: {e}")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Comparables Tab
+    with tab3:
+        st.markdown("<div class='section-card'>", unsafe_allow_html=True)
+        st.markdown("#### Recent Closely Comparable Sales")
+        st.caption("Matches your size, type, lease and town filters.")
+
         if not comp_df.empty:
-            # --- UPDATED: ADD ALL PROXIMITY FEATURES TO THE DISPLAY COLUMNS ---
             cols_to_show = [
                 "month",
                 "floor_area_sqm",
@@ -643,14 +1064,15 @@ def show():
                 "nearest_hawker_distance_km",
                 "resale_price",
             ]
-            # ------------------------------------------------------------------
+            for c in cols_to_show:
+                if c not in comp_df.columns:
+                    comp_df[c] = np.nan
 
             recent = comp_df.sort_values("month", ascending=False)[cols_to_show].head(
-                15
+                25
             )
             if not recent.empty:
-                # Rounding the distance columns for cleaner table view
-                format_dict = {
+                fmt = {
                     "resale_price": "SGD {:,}",
                     "month": "{:%Y-%m}",
                     "nearest_mrt_distance_km": "{:.2f} km",
@@ -659,18 +1081,24 @@ def show():
                     "nearest_supermarkets_distance_km": "{:.2f} km",
                     "nearest_hawker_distance_km": "{:.2f} km",
                 }
+                st.dataframe(recent.style.format(fmt), use_container_width=True)
 
-                st.dataframe(
-                    recent.style.format(format_dict),
-                    use_container_width=True,
+                st.download_button(
+                    "⬇️ Download Comparables CSV",
+                    data=recent.to_csv(index=False).encode("utf-8"),
+                    file_name=f"comparables_{town}_{flat_type.replace(' ', '_').lower()}.csv",
+                    mime="text/csv",
                 )
             else:
                 st.info("No recent comparable sales matching all filters.")
         else:
             st.info("No comparable transactions under current filters.")
 
-    # Sidebar footer (model info)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    # Sidebar footer info
     with st.sidebar:
+        st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
         if model_loaded:
             try:
                 _last_est = (
@@ -681,19 +1109,16 @@ def show():
                 _est_name = _last_est.__class__.__name__
             except Exception:
                 _est_name = model.__class__.__name__
-
             _feat_cnt = len(getattr(model, "feature_names_in_", []))
             model_info = f"Model: `best_rf_pipeline.pkl` ({_est_name})" + (
-                f" · features: {_feat_cnt}" if _feat_cnt is not None else ""
+                f" · features: {_feat_cnt}" if _feat_cnt else ""
             )
         else:
             model_info = "Model: not loaded"
 
         st.caption(f"Data: `hdb_df_geocoded_condensed.duckdb`\n\n{model_info}")
-
-        if model_loaded and _feat_cnt > 0:
-            show_features = st.toggle("Show all model features", value=False)
-            if show_features:
+        if model_loaded and getattr(model, "feature_names_in_", None) is not None:
+            if st.toggle("Show model features", value=False):
                 st.dataframe(
                     pd.DataFrame({"Feature": list(model.feature_names_in_)}),
                     use_container_width=True,
