@@ -28,6 +28,9 @@ python data/download_data.py
 
 ### 5) Add your API keys
 Create a local `.env` from the `.env.example` template and fill in your own values
+```bash
+cp .env.example .env
+```
 
 ### 6) Start the app
 
