@@ -26,7 +26,10 @@ brew install libomp
 python data/download_data.py
 ```
 
-### 5) Start the app
+### 5) Add your API keys
+Create a local `.env` from the `.env.example` template and fill in your own values
+
+### 6) Start the app
 
 ```bash
 streamlit run app.py
