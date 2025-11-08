@@ -18,6 +18,7 @@ def show_flat_distribution(df):
         fig.update_traces(
             textinfo="percent",
             pull=[0.04] * len(flat_counts),
+            textposition="outside"
         )
 
         fig.update_layout(
