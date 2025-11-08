@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 
 def latest_snapshot(df):
+    """Render five KPI cards summarizing the most recent month of the market."""
+    
     df["month"] = pd.to_datetime(df["month"])
     latest_month = df["month"].max()
     prev_month = latest_month - pd.DateOffset(months=1)

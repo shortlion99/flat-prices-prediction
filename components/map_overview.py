@@ -39,7 +39,8 @@ def show_map():
         map_df = load_map_data(limit=limit)
         # Normalize resale_price
         price_min, price_max = map_df["resale_price"].min(), map_df["resale_price"].max()
-        map_df["price_norm"] = (map_df["resale_price"] - price_min) / (price_max - price_min)
+        denom = (price_max - price_min) or 1
+        map_df["price_norm"] = (map_df["resale_price"] - price_min) / denom
         map_df["month"] = pd.to_datetime(map_df["month"], errors="coerce").dt.strftime("%b %Y")
         
         # --- Scatter layer ---

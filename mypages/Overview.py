@@ -28,13 +28,13 @@ def show():
         st.caption(
             "Explore historical market trends, price distributions, and geographic insights across Singapore's HDB resale market."
         )
-        latest_snapshot(df)
+        latest_snapshot(df) # Market Snapshot
         col1, col2 = st.columns([2, 1]) 
         with col1:
-            show_price_trends(df)
+            show_price_trends(df) # Historical Price Trends
         with col2:
-            show_flat_distribution(df)
+            show_flat_distribution(df) # Flat Type Distribution
 
-        show_map()
-        show_resale_price_distribution(df)
-        show_relationship(df)
+        show_map() # Map of Resale Transactions
+        show_resale_price_distribution(df) # Mean Resale Price Analysis
+        show_relationship(df) # Variable Impact on Resale Price

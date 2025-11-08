@@ -8,10 +8,12 @@ def show_relationship(df):
     """Interactive scatterplot with optional regression line for price relationships."""
     
     with st.container(border=True):
-        st.markdown("## Variable Impact on Resale Price")
+        st.markdown("## 📌 Variable Impact on Resale Price")
 
-        # --- Selection Row (3 Columns) ---
+        # --- Selection Row ---
         col1, col2, col3 = st.columns([1, 1, 1])
+        
+        # x-axis
         with col1:
             x_axis_labels = {
                 "floor_area_sqm": "Floor Area (sqm)",
@@ -27,6 +29,7 @@ def show_relationship(df):
                 format_func=lambda x: x_axis_labels[x],
             )
 
+        # y-axis
         with col2:
             y_axis_labels = {
                 "resale_price": "Resale Price",
@@ -38,7 +41,8 @@ def show_relationship(df):
                 index=0,
                 format_func=lambda x: y_axis_labels[x],
             )
-
+        
+        # Group By
         with col3:
             color_labels = {
                 None: "None",
