@@ -2,8 +2,8 @@ import joblib
 import numpy as np
 import pandas as pd
 import streamlit as st
+from data.data_access import get_duckdb_conn
 import altair as alt
-import duckdb
 import pydeck as pdk
 
 # --- TOWN TO REGION MAPPING ---
@@ -48,10 +48,8 @@ def render_altair(chart):
 
 
 @st.cache_data(show_spinner="Loading data and preparing features...")
-def load_data(path: str = "data/hdb_df_geocoded_condensed.duckdb"):
-    """Loads and preprocesses HDB data from DuckDB."""
-    con = duckdb.connect(path)
-
+def load_data():
+    con = get_duckdb_conn()
     df = con.execute(
         """
         SELECT 
@@ -66,7 +64,6 @@ def load_data(path: str = "data/hdb_df_geocoded_condensed.duckdb"):
         FROM resale
         """
     ).df()
-    con.close()
 
     # Create year column
     if "month" in df.columns:
@@ -206,7 +203,7 @@ def show():
     )
 
     # Load Data and Model
-    df, flat_cols, flat_types = load_data("data/hdb_df_geocoded_condensed.duckdb")
+    df, flat_cols, flat_types = load_data()
     model = load_model("models/best_rf_pipeline.pkl")
     model_loaded = model is not None
 
