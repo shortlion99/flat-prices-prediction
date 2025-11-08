@@ -1,10 +1,24 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
+from pathlib import Path
+import subprocess
+import sys
 
 # Import page modules
 import mypages.Overview as overview
 import mypages.Analytics as analytics
 import mypages.Chatbot as chatbot
+
+CSV_PATH = Path("data/hdb_df_geocoded_condensed.csv")
+DUCKDB_PATH = Path("data/hdb_df_geocoded_condensed.duckdb")
+
+@st.cache_resource(show_spinner="Preparing data... This will take about a minute.")
+def ensure_data_ready():
+    if not (CSV_PATH.exists() and DUCKDB_PATH.exists()):
+        subprocess.check_call([sys.executable, "data/download_data.py"])
+    return True
+
+ensure_data_ready()
 
 # --- Page Config ---
 st.set_page_config(
