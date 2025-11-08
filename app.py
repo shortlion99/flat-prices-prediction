@@ -43,7 +43,6 @@ st.markdown(
     * {
         font-family: "Helvetica Neue", Arial, sans-serif !important;
         font-size: 15px !important;
-        color: #111111 !important;
         
     }
 
@@ -75,6 +74,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+
 # --- Navbar ---
 with st.container():
     selected = option_menu(
@@ -86,10 +86,10 @@ with st.container():
         orientation="horizontal",
         key="nav",
         styles={
-            "container": {"padding": "0!important", "background-color": "#fafafa"},
+            "container": {"padding": "0!important"},
             "icon": {"font-size": "20px"},
             "nav-link": {"font-size": "18px", "text-align": "center", "margin": "0px"},
-            "nav-link-selected": {"background-color": "#950606", "color": "white"},
+            "nav-link-selected": {"background-color": "#950606"},
         }
     )
 
