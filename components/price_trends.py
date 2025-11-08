@@ -92,7 +92,7 @@ def show_price_trends(df):
                 text=f"{agg_func} {measure_labels[y_axis]} by {group_by_labels[group_by]}",
                 x=0,
                 xanchor="left",
-                font=dict(size=20, color="black")
+                font=dict(size=20)
             ),
             xaxis_title="Year",
             yaxis_title=f"{agg_func} {measure_labels[y_axis]}",
