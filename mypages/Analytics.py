@@ -548,7 +548,11 @@ def show():
     st.markdown("<h1 class='main-title'>HDB Analytics</h1>", unsafe_allow_html=True)
     st.markdown(
 <<<<<<< HEAD
+<<<<<<< HEAD
         "<div class='subcap'>Estimate prices, explore market trends, and preview the next few months with SARIMAX.</div>",
+=======
+        "<div class='subcap'>Estimate prices, explore market trends, and preview the next few months.</div>",
+>>>>>>> def853089285ad9a054e058ac648a8d5762e9401
 =======
         "<div class='subcap'>Estimate prices, explore market trends, and preview the next few months.</div>",
 >>>>>>> def853089285ad9a054e058ac648a8d5762e9401
@@ -570,10 +574,13 @@ def show():
         flat_type = st.selectbox("Flat Type", flat_types, index=0)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
         a_min = float(max(20.0, df["floor_area_sqm"].quantile(0.02)))
         a_max = float(min(200.0, df["floor_area_sqm"].quantile(0.98)))
         area = st.slider("Size (sqm)", a_min, a_max, float(np.clip(80.0, a_min, a_max)))
 =======
+=======
+>>>>>>> def853089285ad9a054e058ac648a8d5762e9401
         # --- size slider limits based on selected town + flat type ---
         # Build the dummy-column name for the chosen flat type
         ft_norm = _norm_flat_label(flat_type)  # e.g. "2 ROOM"
@@ -620,6 +627,9 @@ def show():
             help="Range is derived from recent sales for this town and flat type.",
         )
 
+<<<<<<< HEAD
+>>>>>>> def853089285ad9a054e058ac648a8d5762e9401
+=======
 >>>>>>> def853089285ad9a054e058ac648a8d5762e9401
         lease = st.slider("Remaining Lease (years)", 0, 99, 60)
 
@@ -686,7 +696,10 @@ def show():
     price_dist_df = df[df["town"] == town].copy()
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     trend = None
+=======
+>>>>>>> def853089285ad9a054e058ac648a8d5762e9401
 =======
 >>>>>>> def853089285ad9a054e058ac648a8d5762e9401
     trend_monthly = None
@@ -747,6 +760,7 @@ def show():
                     forecast_df = None
 
 <<<<<<< HEAD
+<<<<<<< HEAD
             trend_data = (
                 trend_monthly[["month", "price"]]
                 .rename(columns={"price": "resale_price"})
@@ -759,6 +773,8 @@ def show():
                 .sort_values("year")
             )
 
+=======
+>>>>>>> def853089285ad9a054e058ac648a8d5762e9401
 =======
 >>>>>>> def853089285ad9a054e058ac648a8d5762e9401
     # ---------------- Header KPIs (equal width) ----------------
@@ -791,7 +807,11 @@ def show():
     with tab1:
         st.markdown("#### Median Price Forecast")
 <<<<<<< HEAD
+<<<<<<< HEAD
         st.caption("Area-adjusted history + SARIMAX forecast with 95% confidence band.")
+=======
+        st.caption("Area-adjusted history + forecast with 95% confidence band.")
+>>>>>>> def853089285ad9a054e058ac648a8d5762e9401
 =======
         st.caption("Area-adjusted history + forecast with 95% confidence band.")
 >>>>>>> def853089285ad9a054e058ac648a8d5762e9401
@@ -1141,7 +1161,10 @@ def show():
             if not recent.empty:
                 fmt = {
 <<<<<<< HEAD
+<<<<<<< HEAD
                     "resale_price": "SGD {:,}",
+=======
+>>>>>>> def853089285ad9a054e058ac648a8d5762e9401
 =======
 >>>>>>> def853089285ad9a054e058ac648a8d5762e9401
                     "month": "{:%Y-%m}",
@@ -1168,6 +1191,7 @@ def show():
             st.info("No comparable transactions under current filters.")
 
         st.markdown("</div>", unsafe_allow_html=True)
+<<<<<<< HEAD
 <<<<<<< HEAD
 
     # Sidebar footer info
@@ -1197,6 +1221,8 @@ def show():
                     pd.DataFrame({"Feature": list(model.feature_names_in_)}),
                     use_container_width=True,
                 )
+=======
+>>>>>>> def853089285ad9a054e058ac648a8d5762e9401
 =======
 >>>>>>> def853089285ad9a054e058ac648a8d5762e9401
 
