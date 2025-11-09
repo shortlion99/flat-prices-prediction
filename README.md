@@ -21,9 +21,10 @@ pip install -r requirements.txt
 brew install libomp
 ```
 
-### 4) Download the data
+### 4) Add your API keys
+Create a local `.env` from the `.env.example` template and fill in your own values
 ```bash
-python data/download_data.py
+cp .env.example .env
 ```
 
 ### 5) Start the app

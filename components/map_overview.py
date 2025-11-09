@@ -1,35 +1,28 @@
 import streamlit as st
-import duckdb
+from data.data_access import get_duckdb_conn
 import pydeck as pdk
 import pandas as pd
 
-@st.cache_data
-def load_map_data(limit=20000):
-    con = duckdb.connect("data/hdb_df_geocoded_condensed.duckdb")
-    query = f"""
+@st.cache_data(show_spinner=False)
+def load_map_data(limit: int = 20_000) -> pd.DataFrame:
+    con = get_duckdb_conn()
+    return con.execute(
+        """
         SELECT 
-            latitude, 
-            longitude, 
-            resale_price/1000 as resale_price,
-            ROUND(price_per_sqm,2) AS price_per_sqm,
-            flat_type,
-            flat_model,
-            floor_area_sqm,
-            storey_range,
-            region,
-            month,
-            district_number,
-            nearest_mrt_name,
-            ROUND(nearest_mrt_distance_km,2) AS nearest_mrt_distance_km,
+            latitude, longitude,
+            resale_price/1000 AS resale_price,
+            ROUND(price_per_sqm, 2) AS price_per_sqm,
+            flat_type, flat_model, floor_area_sqm, storey_range, region, month,
+            district_number, nearest_mrt_name,
+            ROUND(nearest_mrt_distance_km, 2) AS nearest_mrt_distance_km,
             nearest_schools_name,
-            ROUND(nearest_schools_distance_km,2) AS nearest_schools_distance_km
+            ROUND(nearest_schools_distance_km, 2) AS nearest_schools_distance_km
         FROM resale
         WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-        LIMIT {limit}
-    """
-    df = con.execute(query).df()
-    con.close()
-    return df
+        LIMIT ?
+        """,
+        [int(limit)],
+    ).df()
 
 def show_map():
     with st.container(border=True):
@@ -46,7 +39,8 @@ def show_map():
         map_df = load_map_data(limit=limit)
         # Normalize resale_price
         price_min, price_max = map_df["resale_price"].min(), map_df["resale_price"].max()
-        map_df["price_norm"] = (map_df["resale_price"] - price_min) / (price_max - price_min)
+        denom = (price_max - price_min) or 1
+        map_df["price_norm"] = (map_df["resale_price"] - price_min) / denom
         map_df["month"] = pd.to_datetime(map_df["month"], errors="coerce").dt.strftime("%b %Y")
         
         # --- Scatter layer ---

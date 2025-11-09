@@ -1,10 +1,24 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
+from pathlib import Path
+import subprocess
+import sys
 
 # Import page modules
 import mypages.Overview as overview
 import mypages.Analytics as analytics
 import mypages.Chatbot as chatbot
+
+CSV_PATH = Path("data/hdb_df_geocoded_condensed.csv")
+DUCKDB_PATH = Path("data/hdb_df_geocoded_condensed.duckdb")
+
+@st.cache_resource(show_spinner="Preparing data... This will take about a minute.")
+def ensure_data_ready():
+    if not (CSV_PATH.exists() and DUCKDB_PATH.exists()):
+        subprocess.check_call([sys.executable, "data/download_data.py"])
+    return True
+
+ensure_data_ready()
 
 # --- Page Config ---
 st.set_page_config(
@@ -29,7 +43,6 @@ st.markdown(
     * {
         font-family: "Helvetica Neue", Arial, sans-serif !important;
         font-size: 15px !important;
-        color: #111111 !important;
         
     }
 
@@ -61,6 +74,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+
 # --- Navbar ---
 with st.container():
     selected = option_menu(
@@ -72,10 +86,10 @@ with st.container():
         orientation="horizontal",
         key="nav",
         styles={
-            "container": {"padding": "0!important", "background-color": "#fafafa"},
+            "container": {"padding": "0!important"},
             "icon": {"font-size": "20px"},
             "nav-link": {"font-size": "18px", "text-align": "center", "margin": "0px"},
-            "nav-link-selected": {"background-color": "#950606", "color": "white"},
+            "nav-link-selected": {"background-color": "#950606"},
         }
     )
 
