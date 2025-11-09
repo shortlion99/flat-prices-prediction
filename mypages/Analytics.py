@@ -547,7 +547,7 @@ def show():
 
     st.markdown("<h1 class='main-title'>HDB Analytics</h1>", unsafe_allow_html=True)
     st.markdown(
-        "<div class='subcap'>Estimate prices, explore market trends, and preview the next few months with SARIMAX.</div>",
+        "<div class='subcap'>Estimate prices, explore market trends, and preview the next few months.</div>",
         unsafe_allow_html=True,
     )
     st.write("")
@@ -565,9 +565,52 @@ def show():
         town = st.selectbox("Town", sorted(df["town"].dropna().unique().tolist()))
         flat_type = st.selectbox("Flat Type", flat_types, index=0)
 
-        a_min = float(max(20.0, df["floor_area_sqm"].quantile(0.02)))
-        a_max = float(min(200.0, df["floor_area_sqm"].quantile(0.98)))
-        area = st.slider("Size (sqm)", a_min, a_max, float(np.clip(80.0, a_min, a_max)))
+        # --- size slider limits based on selected town + flat type ---
+        # Build the dummy-column name for the chosen flat type
+        ft_norm = _norm_flat_label(flat_type)  # e.g. "2 ROOM"
+        ft_col = "flat_type_" + ft_norm.replace(" ", "_")  # e.g. "flat_type_2_ROOM"
+
+        # Filter to selected town + flat type (if the dummy exists)
+        mask = df["town"] == town
+        if ft_col in df.columns:
+            mask &= df[ft_col] == 1
+
+        sizes = df.loc[mask, "floor_area_sqm"].dropna()
+
+        # Robust bounds (clip extreme outliers); fallback to global if empty
+        if not sizes.empty:
+            low = float(np.floor(sizes.quantile(0.05)))
+            high = float(np.ceil(sizes.quantile(0.95)))
+            default = float(np.median(sizes))
+        else:
+            # fallback to overall distribution
+            all_sizes = df["floor_area_sqm"].dropna()
+            low = (
+                float(np.floor(all_sizes.quantile(0.05)))
+                if not all_sizes.empty
+                else 20.0
+            )
+            high = (
+                float(np.ceil(all_sizes.quantile(0.95)))
+                if not all_sizes.empty
+                else 200.0
+            )
+            default = 80.0
+
+        # Safety: ensure min < max and default inside range
+        if high <= low:
+            high = low + 1.0
+        default = float(np.clip(default, low, high))
+
+        area = st.slider(
+            "Size (sqm)",
+            low,
+            high,
+            default,
+            step=1.0,
+            help="Range is derived from recent sales for this town and flat type.",
+        )
+
         lease = st.slider("Remaining Lease (years)", 0, 99, 60)
 
         forecast_horizon = st.slider(
@@ -632,7 +675,6 @@ def show():
     ]
     price_dist_df = df[df["town"] == town].copy()
 
-    trend = None
     trend_monthly = None
     forecast_df = None
     forecast_error = None
@@ -690,18 +732,6 @@ def show():
                     forecast_error = str(e)
                     forecast_df = None
 
-            trend_data = (
-                trend_monthly[["month", "price"]]
-                .rename(columns={"price": "resale_price"})
-                .copy()
-            )
-            trend_data["year"] = trend_data["month"].dt.year
-            trend = (
-                trend_data.groupby("year", as_index=False)["resale_price"]
-                .median()
-                .sort_values("year")
-            )
-
     # ---------------- Header KPIs (equal width) ----------------
     c1, c2, c3, c4 = st.columns([1, 1, 1, 1])  # equal widths
     with c1:
@@ -731,7 +761,7 @@ def show():
     # Forecast Tab
     with tab1:
         st.markdown("#### Median Price Forecast")
-        st.caption("Area-adjusted history + SARIMAX forecast with 95% confidence band.")
+        st.caption("Area-adjusted history + forecast with 95% confidence band.")
 
         if (
             trend_monthly is not None
@@ -1077,13 +1107,15 @@ def show():
             )
             if not recent.empty:
                 fmt = {
-                    "resale_price": "SGD {:,}",
                     "month": "{:%Y-%m}",
+                    "floor_area_sqm": "{:.1f}",
+                    "remaining_lease": "{:.0f}",
                     "nearest_mrt_distance_km": "{:.2f} km",
                     "nearest_schools_distance_km": "{:.2f} km",
                     "nearest_childcare_distance_km": "{:.2f} km",
                     "nearest_supermarkets_distance_km": "{:.2f} km",
                     "nearest_hawker_distance_km": "{:.2f} km",
+                    "resale_price": "SGD {:,.2f}",
                 }
                 st.dataframe(recent.style.format(fmt), use_container_width=True)
 
