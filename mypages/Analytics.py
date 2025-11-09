@@ -171,7 +171,7 @@ def load_data():
 
 
 @st.cache_resource(show_spinner="Loading machine learning model…")
-def load_model(path: str = "models/best_rf_pipeline.pkl"):
+def load_model(path: str = "models/best_random_forest_model.pkl"):
     try:
         return joblib.load(path)
     except Exception:
@@ -554,7 +554,7 @@ def show():
 
     # Data + models
     df, flat_cols, flat_types = load_data()
-    rf_model = load_model("models/best_rf_pipeline.pkl")
+    rf_model = load_model("models/best_random_forest_model.pkl")
     model = rf_model
     model_loaded = model is not None
     sarimax_model = load_sarimax_model("models/sarimax_flattype_district.pkl")
@@ -1114,7 +1114,7 @@ def show():
             except Exception:
                 _est_name = model.__class__.__name__
             _feat_cnt = len(getattr(model, "feature_names_in_", []))
-            model_info = f"Model: `best_rf_pipeline.pkl` ({_est_name})" + (
+            model_info = f"Model: `best_random_forest_model.pkl` ({_est_name})" + (
                 f" · features: {_feat_cnt}" if _feat_cnt else ""
             )
         else:
