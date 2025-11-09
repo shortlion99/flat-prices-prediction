@@ -1132,34 +1132,6 @@ def show():
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Sidebar footer info
-    with st.sidebar:
-        st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
-        if model_loaded:
-            try:
-                _last_est = (
-                    list(model.named_steps.values())[-1]
-                    if hasattr(model, "named_steps")
-                    else model.steps[-1][1]
-                )
-                _est_name = _last_est.__class__.__name__
-            except Exception:
-                _est_name = model.__class__.__name__
-            _feat_cnt = len(getattr(model, "feature_names_in_", []))
-            model_info = f"Model: `best_random_forest_model.pkl` ({_est_name})" + (
-                f" · features: {_feat_cnt}" if _feat_cnt else ""
-            )
-        else:
-            model_info = "Model: not loaded"
-
-        st.caption(f"Data: `hdb_df_geocoded_condensed.duckdb`\n\n{model_info}")
-        if model_loaded and getattr(model, "feature_names_in_", None) is not None:
-            if st.toggle("Show model features", value=False):
-                st.dataframe(
-                    pd.DataFrame({"Feature": list(model.feature_names_in_)}),
-                    use_container_width=True,
-                )
-
 
 if __name__ == "__main__":
     show()
