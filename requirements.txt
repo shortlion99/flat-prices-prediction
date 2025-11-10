@@ -61,3 +61,4 @@ langchain-community>=0.0.30
 langchain-chroma>=0.1.0
 langchain-huggingface>=0.1.0
 sentence-transformers>=2.2.0
+Markdown>=3.5
