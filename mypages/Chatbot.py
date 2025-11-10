@@ -3,6 +3,8 @@ import streamlit as st
 from pathlib import Path
 from dotenv import load_dotenv
 from chatbot.rag_chatbot import answer as rag_answer  # backend adapter
+from markdown import markdown
+from html import escape
 
 # helper lives at module scope (fine either here or inside show())
 def set_new_message(message: str):
@@ -12,7 +14,20 @@ def set_new_message(message: str):
 
 def show():
     st.title("💬 Property Price Chatbot")
-    st.write("Ask me anything about Singapore's HDB resale market!")
+    st.write("Ask me anything about Singapore's HDB resale market, from town profiles to price trends!")
+    st.markdown(
+    """
+    You can ask me things like:  
+    🏡 What are the pros and cons of living in Bedok, as compared to Yishun?  
+    💰 Which towns are most affordable for 4-room flats?  
+    🚇 What are the amenities available in Toa Payoh?  
+
+    ⚠️ **Note:** I can only answer questions related to Singapore's HDB resale market.  
+    For official housing policies, eligibility, or procedural queries, I'll guide you to trusted sources instead.  
+    Price prediction requests will be redirected to our **Analytics page** for a detailed breakdown. 😄
+
+    """
+    )
 
     # Ensure .env is loaded when running Streamlit from repo root
     ROOT = Path(__file__).resolve().parents[1]
@@ -84,9 +99,10 @@ def show():
     chat_html = "<div class='chat-container' id='chat-container'>"
     for msg in st.session_state.chat_history:
         if msg["role"] == "user":
-            chat_html += f"<div class='user-msg'>{msg['text']}</div>"
+            chat_html += f"<div class='user-msg'>{escape(msg['text'])}</div>"
         else:
-            chat_html += f"<div class='bot-msg'>{msg['text']}</div>"
+            bot_html = markdown(msg['text'])
+            chat_html += f"<div class='bot-msg'>{bot_html}</div>"
     chat_html += "</div>"
     st.markdown(chat_html, unsafe_allow_html=True)
 
