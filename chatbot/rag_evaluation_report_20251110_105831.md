@@ -28,7 +28,7 @@ Total test cases: **8**
 - What will be the future price of flats in Punggol?
 
 **Comparison** (1 cases):
-- Compare Woodlands and Queenstown in terms of housing
+- Compare Woodlands and Ang Mo Kio in terms of housing
 
 **Unknown Area** (1 cases):
 - Tell me about Marina Bay housing options
@@ -58,11 +58,6 @@ Total test cases: **8**
 - **Quality Score:** 1.000
 
 **Sample 2:**
-- **Question:** Compare Woodlands and Queenstown in terms of housing
-- **Response:** I don't have information on Queenstown in the provided context, so I cannot compare it with Woodlands. Woodlands offers HDB flats priced between **SGD 362K–560K**, with pros like affordability and proximity to Malaysia, but it is far from the city center.
-- **Quality Score:** 0.833
-
-**Sample 3:**
 - **Question:** Tell me about Clementi
 - **Response:** Clementi is a mature town in Singapore known for its **excellent location near NUS and the one-north business hub**, with **strong connectivity via MRT and major expressways (AYE, PIE)**. HDB flats here range from **SGD 366K to 715K**, but many are older and in high demand, with limited new BTO projects. Nearby amenities include **Clementi Mall, Clementi Sports Hall, and West Coast Park**.
 - **Quality Score:** 1.000

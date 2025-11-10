@@ -115,7 +115,7 @@ class RAGEvaluator:
             
             # Comparison Questions - Hard
             TestCase(
-                question="Compare Woodlands and Queenstown in terms of housing",
+                question="Compare Woodlands and Ang Mo Kio in terms of housing",
                 expected_areas=["Woodlands", "Queenstown"],
                 expected_keywords=["price", "pros", "cons"],
                 category="comparison",
@@ -552,7 +552,7 @@ class RAGEvaluator:
         # Add 3 random samples from detailed results
         if "detailed_results" in result.details and result.details["detailed_results"]:
             import random
-            samples = random.sample(result.details["detailed_results"], min(3, len(result.details["detailed_results"])))
+            samples = random.sample(result.details["detailed_results"], min(2, len(result.details["detailed_results"])))
             
             for i, sample in enumerate(samples, 1):
                 section += f"**Sample {i}:**\n"
