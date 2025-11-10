@@ -1,22 +1,22 @@
 # RAG Chatbot Evaluation Report
 
-        **Generated Time:** 2025-11-10 10:58:31  
-        **Data File:** ../data/hdb_rag/singapore_hdb_data.json
+**Generated Time:** 2025-11-10 10:58:31  
+**Data File:** ../data/hdb_rag/singapore_hdb_data.json
 
-        ## Executive Summary
+## Executive Summary
 
-        - **Ground Truth Accuracy:** 0.855
+- **Ground Truth Accuracy:** 0.855
 - **Response Quality:** 0.922
 - **Price Prediction Handling:** 1.000
 - **Response Time:** 0.800
 
 **Overall RAG Performance:** 0.894
 
-        ## Test Cases Used for Evaluation
+## Test Cases Used for Evaluation
 
-        Total test cases: **8**
+Total test cases: **8**
 
-        **Area Info** (2 cases):
+**Area Info** (2 cases):
 - Tell me about Clementi
 - What are the pros of living in Tampines?
 
@@ -40,19 +40,19 @@
 
 ### Ground Truth Accuracy
 
-        **How it's derived:** Compares generated responses to manually created ground truth answers using semantic similarity (60%) combined with keyword matching (25%) and housing area mention accuracy (15%).
+**How it's derived:** Compares generated responses to manually created ground truth answers using semantic similarity (60%) combined with keyword matching (25%) and housing area mention accuracy (15%).
 
-        **Score:** 0.855
+**Score:** 0.855
 
-        ### Response Quality
+### Response Quality
 
-        **How it's derived:** Evaluates keyword presence (50%), area mention accuracy (30%), and response length appropriateness (20%).
+**How it's derived:** Evaluates keyword presence (50%), area mention accuracy (30%), and response length appropriateness (20%).
 
-        **Score:** 0.922
+**Score:** 0.922
 
-        **Sample Generated Answers:**
+**Sample Generated Answers:**
 
-        **Sample 1:**
+**Sample 1:**
 - **Question:** What's the price range for HDB flats in Yishun?
 - **Response:** The price range for HDB flats in **Yishun** is **SGD 343,000 to 530,000**. It is considered relatively affordable compared to other areas in Singapore.
 - **Quality Score:** 1.000
@@ -69,13 +69,13 @@
 
 ### Price Prediction Handling
 
-        **How it's derived:** Measures proper redirection to Analytics Dashboard (70%) and avoidance of making actual predictions (30%).
+**How it's derived:** Measures proper redirection to Analytics Dashboard (70%) and avoidance of making actual predictions (30%).
 
-        **Score:** 1.000
+**Score:** 1.000
 
-        **Sample Generated Answers for Price Prediction:**
+**Sample Generated Answers for Price Prediction:**
 
-        **Sample 1:**
+**Sample 1:**
 - **Question:** Can you predict HDB prices for next year?
 - **Response:** For price prediction and analytics, please refer to **our dashboard**, which has advanced machine learning models for HDB price forecasting and comprehensive market analytics.
 - **Redirect Score:** 1.000
@@ -87,9 +87,9 @@
 
 ### Response Time
 
-        **How it's derived:** Measures average response time in seconds. Score: ≤2s = 1.0, ≤5s = 0.8, ≤10s = 0.6, >10s = 0.4.
+**How it's derived:** Measures average response time in seconds. Score: ≤2s = 1.0, ≤5s = 0.8, ≤10s = 0.6, >10s = 0.4.
 
-        **Score:** 0.800
+**Score:** 0.800
 
-        **Average Response Time:** 2.96 seconds
+**Average Response Time:** 2.96 seconds
 
