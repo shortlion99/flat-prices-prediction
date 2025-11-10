@@ -115,17 +115,17 @@ class RAGEvaluator:
             
             # Comparison Questions - Hard
             TestCase(
-                question="Compare Woodlands and Ang Mo Kio in terms of housing",
-                expected_areas=["Woodlands", "Queenstown"],
+                question="Compare living in Punggol vs Toa Payoh",
+                expected_areas=["Punggol", "Toa Payoh"],
                 expected_keywords=["price", "pros", "cons"],
                 category="comparison",
                 difficulty="hard",
-                ground_truth_answer="Woodlands vs Queenstown Housing Comparison:\n\nWoodlands:\n- Generally more affordable HDB prices\n- Newer developments and town planning\n- Good connectivity to Malaysia via Causeway\n- More family-oriented with parks and recreational facilities\n- Typically 3-room flats range from $250k-350k, 4-room from $350k-450k\n\nQueenstown:\n- Higher prices due to central location\n- Mature estate with established amenities\n- Close to CBD and business districts\n- Mix of older and renovated flats\n- Typically 3-room flats range from $400k-550k, 4-room from $500k-700k\n\nQueenstown offers better location and connectivity but at higher prices, while Woodlands provides more affordable options with newer infrastructure."
+                ground_truth_answer="Punggol vs Toa Payoh Housing Comparison:\n\nPunggol:\n- **Pros:** Newer town with modern infrastructure, waterfront living experience, good recreational facilities like Punggol Waterway Park, newer BTO developments available, family-friendly environment\n- **Cons:** Further from city center, limited MRT connectivity (currently only Punggol LRT), fewer established amenities compared to mature estates\n- **Price Range:** Generally more affordable, typically SGD 400K-600K for resale flats\n- **Character:** Modern planned town with emphasis on water-themed living and eco-friendly development\n\nToa Payoh:\n- **Pros:** Central location with excellent connectivity, mature estate with established amenities, close to Novena medical hub, good food scene, multiple MRT lines access\n- **Cons:** Older HDB blocks (many from 1960s-1980s), higher property prices due to location, limited parking, more crowded\n- **Price Range:** Higher due to central location, typically SGD 450K-700K for resale flats\n- **Character:** One of Singapore's first satellite towns, rich history, central and well-connected\n\n**Summary:** Toa Payoh offers better connectivity and central location but at higher costs, while Punggol provides modern living and affordability but with trade-offs in accessibility to the city center."
             ),
             
             # Areas without HDB housing questions 
             TestCase(
-                question="Tell me about Marina Bay housing options",
+                question="Tell me about Marina Bay HDB housing options",
                 expected_areas=[],
                 expected_keywords=["don't know", "no information", "not available"],
                 category="unknown_area",
@@ -135,12 +135,12 @@ class RAGEvaluator:
             
             # General Questions
             TestCase(
-                question="What is your name?",
+                question="What is the weather like?",
                 expected_areas=[],
                 expected_keywords=["assistant", "help", "Singapore", "housing"],
                 category="general",
                 difficulty="easy",
-                ground_truth_answer="I'm an AI assistant specialized in helping with Singapore HDB housing information. I can provide details about different areas, housing prices, amenities, and help you find information about HDB flats across Singapore. How can I help you with your housing questions today?"
+                ground_truth_answer="I'm an AI assistant specialized in helping with Singapore HDB housing information. I cannot provide real-time weather updates. However, you can check the current weather in Singapore using weather services like the **Meteorological Service Singapore (MSS)** or apps like **Google Weather** or **AccuWeather**."
             ),
         ]
         
@@ -153,23 +153,41 @@ class RAGEvaluator:
             self.chatbot = RAGChatbot(self.data_file)
             print("Chatbot initialized successfully")
     
+    def _generate_responses_with_timing(self) -> Tuple[Dict[str, str], List[float]]:
+        """Generate responses for all test cases once with timing measurement."""
+        print("\nGenerating responses for all test cases...")
+        
+        self.initialize_chatbot()
+        responses = {}
+        response_times = []
+        
+        for i, test_case in enumerate(self.test_cases, 1):
+            print(f"  {i}/{len(self.test_cases)}: {test_case.question[:50]}...")
+            
+            start_time = time.time()
+            response = self.chatbot.chat(test_case.question)
+            end_time = time.time()
+            
+            responses[test_case.question] = response
+            response_times.append(end_time - start_time)
+        
+        print(f"Generated {len(responses)} responses successfully!")
+        return responses, response_times
+    
     # Evaluation Functions (retrieval-based questions) ======================================================
     
-    def evaluate_response_quality(self) -> EvaluationResult:
+    def evaluate_response_quality(self, responses: Dict[str, str]) -> EvaluationResult:
         """
         Evaluate the quality of generated responses.
         """
         print("\nEvaluating response quality...")
         
-        self.initialize_chatbot()
         quality_scores = []
         detailed_results = []
         
         for test_case in self.test_cases:
-            print(f"  Testing: {test_case.question[:50]}...")
-            
-            # Get response from chatbot
-            response = self.chatbot.chat(test_case.question)
+            # Get pre-generated response
+            response = responses.get(test_case.question, "")
             
             # Calculate quality metrics
             keyword_score = self._calculate_keyword_presence(response, test_case.expected_keywords)
@@ -238,13 +256,11 @@ class RAGEvaluator:
         else:  # Too long
             return 0.5
     
-    def evaluate_ground_truth_accuracy(self) -> EvaluationResult:
+    def evaluate_ground_truth_accuracy(self, responses: Dict[str, str]) -> EvaluationResult:
         """
         Evaluate response accuracy against ground truth answers using semantic similarity.
         """
         print("\nEvaluating ground truth accuracy...")
-        
-        self.initialize_chatbot()
         
         # Initialize sentence transformer for semantic similarity
         similarity_model = SentenceTransformer('all-MiniLM-L6-v2')
@@ -253,10 +269,8 @@ class RAGEvaluator:
         detailed_results = []
         
         for test_case in self.test_cases:
-            print(f"  Testing: {test_case.question[:50]}...")
-            
-            # Get response from chatbot
-            response = self.chatbot.chat(test_case.question)
+            # Get pre-generated response
+            response = responses.get(test_case.question, "")
             
             # Calculate semantic similarity with ground truth
             response_embedding = similarity_model.encode([response])
@@ -303,20 +317,18 @@ class RAGEvaluator:
 
     # Evaluation Functions (Non-retrieval based questions & response time) ==================================
 
-    def evaluate_price_prediction_handling(self) -> EvaluationResult:
+    def evaluate_price_prediction_handling(self, responses: Dict[str, str]) -> EvaluationResult:
         """
         Evaluate how well the system handles price prediction queries.
         """
         print("\nEvaluating price prediction handling...")
-        
-        self.initialize_chatbot()
         
         price_prediction_cases = [tc for tc in self.test_cases if tc.category == "price_prediction"]
         scores = []
         detailed_results = []
         
         for test_case in price_prediction_cases:
-            response = self.chatbot.chat(test_case.question)
+            response = responses.get(test_case.question, "")
             
             # Check if response properly redirects to dashboard
             redirect_keywords = ["dashboard", "prediction", "analytics", "machine learning", "forecasting"]
@@ -351,34 +363,26 @@ class RAGEvaluator:
             timestamp=datetime.now()
         )
     
-    def evaluate_response_time(self) -> EvaluationResult:
+    def evaluate_response_time(self, response_times: List[float]) -> EvaluationResult:
         """
         Evaluate response time performance.
         """
         print("\nEvaluating response time...")
         
-        self.initialize_chatbot()
-        response_times = []
+
+        eval_times = response_times
         detailed_results = []
         
-        # Test with a subset of questions to avoid too long evaluation
-        test_subset = self.test_cases[:5]  
+        for i, response_time in enumerate(eval_times):
+            test_case = self.test_cases[i] if i < len(self.test_cases) else None
+            if test_case:
+                detailed_results.append({
+                    "question": test_case.question,
+                    "response_time": response_time,
+                    "category": test_case.category
+                })
         
-        for test_case in test_subset:
-            start_time = time.time()
-            response = self.chatbot.chat(test_case.question)
-            end_time = time.time()
-            
-            response_time = end_time - start_time
-            response_times.append(response_time)
-            
-            detailed_results.append({
-                "question": test_case.question,
-                "response_time": response_time,
-                "category": test_case.category
-            })
-        
-        avg_time = statistics.mean(response_times) if response_times else 0.0
+        avg_time = statistics.mean(eval_times) if eval_times else 0.0
         
         # Score based on response time (lower is better)
         if avg_time <= 2.0:
@@ -395,9 +399,9 @@ class RAGEvaluator:
             score=time_score,
             details={
                 "average_time": avg_time,
-                "individual_times": response_times,
+                "individual_times": eval_times,
                 "detailed_results": detailed_results,
-                "total_queries": len(response_times)
+                "total_queries": len(eval_times)
             },
             timestamp=datetime.now()
         )
@@ -413,24 +417,27 @@ class RAGEvaluator:
         
         results = {}
         
-        # Run all evaluations
+        # Generate all responses once with timing measurement
+        responses, response_times = self._generate_responses_with_timing()
+        
+        # Run all evaluations using pre-generated responses
         try:
-            results["ground_truth_accuracy"] = self.evaluate_ground_truth_accuracy()
+            results["ground_truth_accuracy"] = self.evaluate_ground_truth_accuracy(responses)
         except Exception as e:
             print(f"Ground truth accuracy evaluation failed: {e}")
         
         try:
-            results["response_quality"] = self.evaluate_response_quality()
+            results["response_quality"] = self.evaluate_response_quality(responses)
         except Exception as e:
             print(f"Response quality evaluation failed: {e}")
         
         try:
-            results["price_prediction_handling"] = self.evaluate_price_prediction_handling()
+            results["price_prediction_handling"] = self.evaluate_price_prediction_handling(responses)
         except Exception as e:
             print(f"Price prediction evaluation failed: {e}")
         
         try:
-            results["response_time"] = self.evaluate_response_time()
+            results["response_time"] = self.evaluate_response_time(response_times)
         except Exception as e:
             print(f"Response time evaluation failed: {e}")
         
@@ -525,6 +532,9 @@ class RAGEvaluator:
         if "response_time" in results:
             report += self._format_response_time_section(results["response_time"])
         
+        # Comprehensive Test Cases and Results Table
+        report += self._format_comprehensive_table(results)
+        
         return report
     
     def _format_ground_truth_section(self, result: EvaluationResult) -> str:
@@ -595,6 +605,58 @@ class RAGEvaluator:
         if "average_time" in result.details:
             section += f"**Average Response Time:** {result.details['average_time']:.2f} seconds\n\n"
         
+        return section
+    
+    def _format_comprehensive_table(self, results: Dict[str, EvaluationResult]) -> str:
+        """Format comprehensive table with all test cases and their results."""
+        section = """
+## Comprehensive Test Cases and Results
+
+| # | Question | Category | Generated Answer | Ground Truth Score | Response Quality Score | Overall Performance |
+|---|----------|----------|------------------|-------------------|----------------------|-------------------|
+"""
+        
+        # Get ground truth results for detailed data
+        ground_truth_results = results.get("ground_truth_accuracy", {})
+        response_quality_results = results.get("response_quality", {})
+        
+        ground_truth_details = ground_truth_results.details.get("detailed_results", []) if hasattr(ground_truth_results, 'details') else []
+        quality_details = response_quality_results.details.get("detailed_results", []) if hasattr(response_quality_results, 'details') else []
+        
+        # Create lookup dictionaries by question for easy matching
+        gt_lookup = {item["question"]: item for item in ground_truth_details}
+        quality_lookup = {item["question"]: item for item in quality_details}
+        
+        for i, test_case in enumerate(self.test_cases, 1):
+            question = test_case.question
+            category = test_case.category.replace('_', ' ').title()
+            
+            # Get generated answer from ground truth results
+            gt_result = gt_lookup.get(question, {})
+            quality_result = quality_lookup.get(question, {})
+            
+            generated_answer = gt_result.get("generated_response", "No response recorded")
+            
+            # Replace newlines and pipes for table formatting
+            generated_answer = generated_answer.replace('\n', ' ').replace('|', '\\|')
+            question = question.replace('|', '\\|')
+            
+            gt_score = gt_result.get("combined_score", "N/A")
+            quality_score = quality_result.get("overall_score", "N/A")
+            
+            # Calculate overall performance for this test case
+            if gt_score != "N/A" and quality_score != "N/A":
+                overall_perf = (float(gt_score) + float(quality_score)) / 2
+                overall_perf_str = f"{overall_perf:.3f}"
+            else:
+                overall_perf_str = "N/A"
+            
+            gt_score_str = f"{gt_score:.3f}" if gt_score != "N/A" else "N/A"
+            quality_score_str = f"{quality_score:.3f}" if quality_score != "N/A" else "N/A"
+            
+            section += f"| {i} | {question} | {category} | {generated_answer} | {gt_score_str} | {quality_score_str} | {overall_perf_str} |\n"
+        
+        section += "\n"
         return section
     
     def print_summary(self, results: Dict[str, EvaluationResult]):
