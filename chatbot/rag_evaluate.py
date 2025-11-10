@@ -458,80 +458,144 @@ class RAGEvaluator:
         return output_file
     
     def _create_markdown_report(self, results: Dict[str, EvaluationResult]) -> str:
-        """Create a markdown formatted evaluation report."""
+        """Create a markdown formatted evaluation report according to user specifications."""
         
+        # Header
         report = f"""# RAG Chatbot Evaluation Report
 
-            **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  
-            **Data File:** {self.data_file}  
-            **Available Areas:** {', '.join(self.available_areas)}
+        **Generated Time:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  
+        **Data File:** {self.data_file}
 
-            ## Executive Summary
+        ## Executive Summary
 
-            """
+        """
         
-        # Overall scores
-        overall_scores = []
-        for metric_name, result in results.items():
-            overall_scores.append(result.score)
-            report += f"- **{metric_name.replace('_', ' ').title()}:** {result.score:.3f}\n"
+        # Overall scores in specified order
+        if "ground_truth_accuracy" in results:
+            report += f"- **Ground Truth Accuracy:** {results['ground_truth_accuracy'].score:.3f}\n"
+        if "response_quality" in results:
+            report += f"- **Response Quality:** {results['response_quality'].score:.3f}\n"
+        if "price_prediction_handling" in results:
+            report += f"- **Price Prediction Handling:** {results['price_prediction_handling'].score:.3f}\n"
+        if "response_time" in results:
+            report += f"- **Response Time:** {results['response_time'].score:.3f}\n"
         
-        if overall_scores:
-            avg_overall = statistics.mean(overall_scores)
+        # Overall RAG performance
+        if results:
+            avg_overall = statistics.mean([r.score for r in results.values()])
             report += f"\n**Overall RAG Performance:** {avg_overall:.3f}\n"
         
-        # Detailed results
-        report += "\n## Detailed Results\n\n"
+        # Test cases used for evaluation
+        report += f"""
+        ## Test Cases Used for Evaluation
+
+        Total test cases: **{len(self.test_cases)}**
+
+        """
         
-        for metric_name, result in results.items():
-            report += f"### {metric_name.replace('_', ' ').title()}\n\n"
-            report += f"**Score:** {result.score:.3f}  \n"
-            report += f"**Timestamp:** {result.timestamp.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            
-            # Add specific details based on metric type
-            if "detailed_results" in result.details:
-                report += "#### Sample Results\n\n"
-                for i, detail in enumerate(result.details["detailed_results"][:3]):  # Show first 3
-                    report += f"**Example {i+1}:**\n"
-                    if "question" in detail:
-                        report += f"- Question: {detail['question']}\n"
-                    if "response" in detail:
-                        report += f"- Response: {detail['response'][:100]}...\n"
-                    if "overall_score" in detail:
-                        report += f"- Score: {detail['overall_score']:.3f}\n"
-                    report += "\n"
-            
-            report += "---\n\n"
+        # List test cases by category
+        categories = {}
+        for tc in self.test_cases:
+            if tc.category not in categories:
+                categories[tc.category] = []
+            categories[tc.category].append(tc.question)
         
-        # Recommendations
-        report += "## Recommendations\n\n"
-        report += self._generate_recommendations(results)
+        for category, questions in categories.items():
+            report += f"**{category.replace('_', ' ').title()}** ({len(questions)} cases):\n"
+            for q in questions:
+                report += f"- {q}\n"
+            report += "\n"
+        
+        # Detailed Results
+        report += "## Detailed Results\n\n"
+        
+        # Ground Truth Accuracy
+        if "ground_truth_accuracy" in results:
+            report += self._format_ground_truth_section(results["ground_truth_accuracy"])
+        
+        # Response Quality  
+        if "response_quality" in results:
+            report += self._format_response_quality_section(results["response_quality"])
+        
+        # Price Prediction Handling
+        if "price_prediction_handling" in results:
+            report += self._format_price_prediction_section(results["price_prediction_handling"])
+        
+        # Response Time
+        if "response_time" in results:
+            report += self._format_response_time_section(results["response_time"])
         
         return report
     
-    def _generate_recommendations(self, results: Dict[str, EvaluationResult]) -> str:
-        """Generate recommendations based on evaluation results."""
-        recommendations = []
+    def _format_ground_truth_section(self, result: EvaluationResult) -> str:
+        """Format ground truth accuracy section."""
+        section = f"""### Ground Truth Accuracy
+
+        **How it's derived:** Compares generated responses to manually created ground truth answers using semantic similarity (60%) combined with keyword matching (25%) and housing area mention accuracy (15%).
+
+        **Score:** {result.score:.3f}
+
+        """
+        return section
+    
+    def _format_response_quality_section(self, result: EvaluationResult) -> str:
+        """Format response quality section."""
+        section = f"""### Response Quality
+
+        **How it's derived:** Evaluates keyword presence (50%), area mention accuracy (30%), and response length appropriateness (20%).
+
+        **Score:** {result.score:.3f}
+
+        **Sample Generated Answers:**
+
+        """
+        # Add 3 random samples from detailed results
+        if "detailed_results" in result.details and result.details["detailed_results"]:
+            import random
+            samples = random.sample(result.details["detailed_results"], min(3, len(result.details["detailed_results"])))
+            
+            for i, sample in enumerate(samples, 1):
+                section += f"**Sample {i}:**\n"
+                section += f"- **Question:** {sample['question']}\n"
+                section += f"- **Response:** {sample['response']}\n"
+                section += f"- **Quality Score:** {sample.get('overall_score', 'N/A'):.3f}\n\n"
         
-        for metric_name, result in results.items():
-            score = result.score
-            
-            if metric_name == "retrieval_relevance" and score < 0.8:
-                recommendations.append("- **Improve Retrieval:** Consider enhancing the retrieval tool description with specific area names and capabilities.")
-            
-            if metric_name == "response_quality" and score < 0.7:
-                recommendations.append("- **Enhance Generation:** Review system prompts and consider fine-tuning response generation.")
-            
-            if metric_name == "price_prediction_handling" and score < 0.9:
-                recommendations.append("- **Price Prediction Routing:** Strengthen the system prompt to better detect and redirect price prediction queries.")
-            
-            if metric_name == "response_time" and score < 0.7:
-                recommendations.append("- **Performance Optimization:** Consider optimizing vector search or using faster embedding models.")
+        return section
+    
+    def _format_price_prediction_section(self, result: EvaluationResult) -> str:
+        """Format price prediction handling section."""
+        section = f"""### Price Prediction Handling
+
+        **How it's derived:** Measures proper redirection to Analytics Dashboard (70%) and avoidance of making actual predictions (30%).
+
+        **Score:** {result.score:.3f}
+
+        **Sample Generated Answers for Price Prediction:**
+
+        """
+        # Add samples from price prediction detailed results
+        if "detailed_results" in result.details and result.details["detailed_results"]:
+            for i, sample in enumerate(result.details["detailed_results"], 1):
+                section += f"**Sample {i}:**\n"
+                section += f"- **Question:** {sample['question']}\n"
+                section += f"- **Response:** {sample['response']}\n"
+                section += f"- **Redirect Score:** {sample.get('redirect_score', 'N/A'):.3f}\n\n"
         
-        if not recommendations:
-            recommendations.append("- **Overall Performance:** RAG system is performing well across all metrics!")
+        return section
+    
+    def _format_response_time_section(self, result: EvaluationResult) -> str:
+        """Format response time section."""
+        section = f"""### Response Time
+
+        **How it's derived:** Measures average response time in seconds. Score: ≤2s = 1.0, ≤5s = 0.8, ≤10s = 0.6, >10s = 0.4.
+
+        **Score:** {result.score:.3f}
+
+        """
+        if "average_time" in result.details:
+            section += f"**Average Response Time:** {result.details['average_time']:.2f} seconds\n\n"
         
-        return "\n".join(recommendations) + "\n"
+        return section
     
     def print_summary(self, results: Dict[str, EvaluationResult]):
         """Print a quick summary of evaluation results."""
@@ -540,13 +604,11 @@ class RAGEvaluator:
         print("=" * 60)
         
         for metric_name, result in results.items():
-            status = "✅" if result.score >= 0.8 else "⚠️" if result.score >= 0.6 else "❌"
-            print(f"{status} {metric_name.replace('_', ' ').title()}: {result.score:.3f}")
+            print(f"{metric_name.replace('_', ' ').title()}: {result.score:.3f}")
         
         if results:
             overall_avg = statistics.mean([r.score for r in results.values()])
-            overall_status = "✅" if overall_avg >= 0.8 else "⚠️" if overall_avg >= 0.6 else "❌"
-            print(f"\n{overall_status} Overall Performance: {overall_avg:.3f}")
+            print(f"\nOverall Performance: {overall_avg:.3f}")
         
         print("=" * 60)
 
