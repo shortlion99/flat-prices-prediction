@@ -70,7 +70,7 @@ class RAGChatbot:
         self._load_or_create_vector_store()
         self._build_graph()
         
-        print("✅ RAG Chatbot initialized successfully!")
+        print("RAG Chatbot initialized successfully!")
     
     def _load_environment(self):
         """
