@@ -619,7 +619,6 @@ def show():
             36,
             12,
             1,
-            help="Number of months to forecast using the SARIMAX model.",
         )
 
         st.markdown("<div class='divider'></div>", unsafe_allow_html=True)
