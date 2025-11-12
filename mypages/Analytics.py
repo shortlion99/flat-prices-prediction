@@ -943,7 +943,7 @@ def show():
         else:
             if sarimax_model is None:
                 st.warning(
-                    "ARIMAX model not loaded. Ensure `models/sarimax_flattype_district.pkl` exists."
+                    "SARIMAX model not loaded. Ensure `models/sarimax_flattype_district.pkl` exists."
                 )
             elif trend_monthly is None or trend_monthly.empty:
                 st.info(
