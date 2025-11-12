@@ -27,7 +27,12 @@ Create a local `.env` from the `.env.example` template and fill in your own valu
 cp .env.example .env
 ```
 
-### 5) Start the app
+### 5) Add your models (Manual Step due to Github LFS size limit) 
+- Download the model files (`sarimax_flattype_district.pkl` and `best_random_forest_model.pkl`) from the zipped folder.
+- Place both files into the `models` folder within your local repository.
+
+
+### 6) Start the app
 
 ```bash
 streamlit run app.py
