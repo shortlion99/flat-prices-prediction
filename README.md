@@ -28,7 +28,7 @@ cp .env.example .env
 ```
 
 ### 5) Add your models (Manual Step due to Github LFS size limit) 
-- Download the model files (`sarimax_flattype_district.pkl` and `best_random_forest_model.pkl`) from the zipped folder.
+- Download the model files (`sarimax_final_model.pkl` and `best_random_forest_model.pkl`) from the zipped folder.
 - Place both files into the `models` folder within your local repository.
 
 

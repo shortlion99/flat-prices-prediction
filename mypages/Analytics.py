@@ -179,7 +179,7 @@ def load_model(path: str = "models/best_random_forest_model.pkl"):
 
 
 @st.cache_resource(show_spinner="Loading time-series model (SARIMAX)…")
-def load_sarimax_model(path: str = "models/sarimax_flattype_district.pkl"):
+def load_sarimax_model(path: str = "models/sarimax_final_model.pkl"):
     try:
         return joblib.load(path)
     except Exception:
@@ -557,7 +557,7 @@ def show():
     rf_model = load_model("models/best_random_forest_model.pkl")
     model = rf_model
     model_loaded = model is not None
-    sarimax_model = load_sarimax_model("models/sarimax_flattype_district.pkl")
+    sarimax_model = load_sarimax_model("models/sarimax_final_model.pkl")
 
     # ---------------- Sidebar ----------------
     with st.sidebar:
@@ -943,7 +943,7 @@ def show():
         else:
             if sarimax_model is None:
                 st.warning(
-                    "SARIMAX model not loaded. Ensure `models/sarimax_flattype_district.pkl` exists."
+                    "SARIMAX model not loaded. Ensure `models/sarimax_final_model.pkl` exists."
                 )
             elif trend_monthly is None or trend_monthly.empty:
                 st.info(
